@@ -11,6 +11,7 @@ import threading
 
 from PySide6 import QtCore, QtWidgets
 from core.logger import get_logger
+from gui import addons
 from gui.utils.file_list_theme import tree_icons
 from gui.utils.page_filters import watch_page_filters
 
@@ -308,13 +309,23 @@ def _scan(game, options, signals):
         pass
 
 
+def _reader(index):
+    """read(path) -> the file's bytes from the game index, or None."""
+
+    def read(path):
+        found = index.read(path)
+        return found[0] if found else None
+
+    return read
+
+
 def _preview_payload(index, group, clip_name, model_path):
     """((mesh, parts with QImages, clip, matched bones), error)."""
     from core.npk import anim_library
     from core.npk.stage_export import StageLoader
     from gui.widgets.scene_render import pil_to_qimage
 
-    read = lambda p: (index.read(p) or (None,))[0]  # noqa: E731
+    read = _reader(index)
     try:
         clip = anim_library.load_clip(read, group, clip_name)
     except ValueError as exc:
@@ -357,7 +368,7 @@ def export_animation(main_window, index, group, clip_name, model_path, kind):
         from core.npk import anim_library
         from core.npk.stage_export import StageLoader
 
-        read = lambda p: (index.read(p) or (None,))[0]  # noqa: E731
+        read = _reader(index)
         progress(f"Exporting {clip_name}…", 0, 1)
         clip = anim_library.load_clip(read, group, clip_name)
         safe = character_anim.safe_name(clip_name)
@@ -387,9 +398,10 @@ def export_animation(main_window, index, group, clip_name, model_path, kind):
 def install(window) -> None:
     """Add "Animations" to the window's category list and its page next to the file list."""
     combo = getattr(window, "entry_category_filter_combobox", None)
-    stack = getattr(window, "left_content", None)
-    if combo is None or stack is None or getattr(window, "_animations_page", None) is not None:
+    if combo is None or getattr(window, "_animations_page", None) is not None:
         return
+    stack = addons.left_stack(window)
+    addons.PAGES.add("animations")
     page = AnimationsPage(window)
     window._animations_page = page
     stack.addWidget(page)
