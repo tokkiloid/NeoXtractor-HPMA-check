@@ -204,6 +204,42 @@ def label_for(filename: str):
     return _LABELS.get(int(numbered.group(1)))
 
 
+def ready() -> bool:
+    """The sound tables are read (see label_for, which starts reading them)."""
+    label_for("0x0.wem")
+    return _STATE["ready"]
+
+
+def tree_path(filename: str) -> str | None:
+    """
+    Where a sound sits in the Audio page's folders: its path inside the wwise packs, a sound that sits directly in a
+    language folder filed under the bank that plays it (english\\vo_spell_battle\\187782238.wem), and sound banks
+    under "banks". None when its path isn't known (or the tables aren't read yet).
+    """
+    text = str(filename or "")
+    hashed, numbered = _HASHED.search(text), _NUMBERED.search(text)
+    if not _STATE["ready"] or (hashed is None and numbered is None):
+        return None
+    name = text.replace("/", "\\").rsplit("\\", 1)[-1]
+    if hashed is None:
+        bank = _LABELS.get(int(numbered.group(1)))
+        return "\\".join(["by bank", bank.split(" +")[0], name]) if bank else None
+    inner = _PATHS.get(int(hashed.group(1), 16))
+    if inner is None:
+        return None
+    parts = inner.split("\\")
+    media = _NUMBERED.search(inner)
+    bank = _LABELS.get(int(media.group(1))) if media else None
+    if len(parts) == 1:
+        if inner.lower().endswith(".bnk"):
+            return "\\".join(["banks", inner])
+        # Sounds outside the language folders: under the bank that plays them, when one does
+        return "\\".join(["sounds", bank.split(" +")[0], inner] if bank else ["sounds", inner])
+    if len(parts) == 2 and bank:
+        return "\\".join([parts[0], bank.split(" +")[0], parts[1]])
+    return inner
+
+
 def labelled(filename):
     label = label_for(filename)
     return f"{filename}{SEPARATOR}{label}" if label else filename

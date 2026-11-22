@@ -35,6 +35,7 @@ def install(app: QtWidgets.QApplication) -> None:
     from core.npk import layered_archives, wwise_audio, wwise_names
     from gui.widgets import (
         animations_page,
+        audio_page,
         characters_items,
         characters_page,
         scene_viewer,
@@ -51,6 +52,7 @@ def install(app: QtWidgets.QApplication) -> None:
         ("the combined game installs", layered_archives.install),  # a pack joins its Documents patch copy
         ("item names in the Characters tab", lambda: characters_items.install(app)),
         ("the Audio category", lambda: wwise_audio.install_category(app)),
+        ("the Audio page", lambda: audio_page.install(app)),
         ("the sound bank labels", lambda: wwise_names.install(app)),  # numbered .wem sounds show their bank
     ):
         try:
