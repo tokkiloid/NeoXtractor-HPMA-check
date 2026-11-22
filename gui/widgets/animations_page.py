@@ -7,6 +7,7 @@ The selected clip plays on its model in the viewer area. Right-click a clip to e
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import threading
 
 from PySide6 import QtCore, QtWidgets
@@ -106,29 +107,49 @@ class AnimationsPage(QtWidgets.QWidget):
         self._show_clip_info([("Status", text)])
 
     def activate(self):
-        """Called when the page is shown: scan the game's animations once per game folder."""
-        from gui.widgets.character_anim_export import _game_folder, _game_options
+        """Called when the page is shown: list the animations of the open pack (once per pack)."""
+        from gui.widgets.character_anim_export import _game_options
 
-        game = _game_folder()
-        if game is None:
-            self._status("Open any Harry Potter: Magic Awakened .npk first, so the game folder is known.")
+        app = QtWidgets.QApplication.instance()
+        archive = app.property("npk_file") if app is not None else None
+        pack = str(Path(archive.file_path).resolve()) if getattr(archive, "file_path", None) else None
+        if pack is None:
+            self.clear()
+            self._status("Open a pack that holds animations, such as model\\character.npk.")
             return
-        if self.game is not None and str(game) == str(self.game):
+        if pack == self.game:
             if self.groups:
                 self._search_timer.start()  # the search may have changed on another page
-            return  # this game is listed, or its scan is still running
-        self.game = game
-        self._status("Reading the game's file list…")
-        threading.Thread(target=_scan, args=(game, _game_options(), self._signals), daemon=True).start()
+            return  # this pack is listed, or its scan is still running
+        self.clear()
+        self.game = pack
+        self._status("Reading the pack's file list…")
+        threading.Thread(target=_scan, args=(pack, _game_options(), self._signals), daemon=True).start()
+
+    def clear(self):
+        """Forget the listed pack (unloaded, or another one opened): the list and the view empty."""
+        self.game, self.index, self.groups, self.current = None, None, [], None
+        self.generation += 1  # a preview still loading is dropped
+        self.tree.clear()
+        self.model.hide()
+        if self.preview_object is not None and hasattr(self.view, "remove_objects"):
+            self.view.remove_objects([self.preview_object])
+            self.preview_object = None
+            self.view.update()
 
     def _scanned(self, payload, error):
+        if payload is not None and payload[2] != self.game:
+            return  # an older pack's list: another pack was opened since
         if error:
             self.game = None  # so opening Animations again tries once more
             self._status(f"Could not list the animations: {error}")
             return
-        self.index, self.groups = payload
+        self.index, self.groups, _pack = payload
         total = sum(len(g.clips) for g in self.groups)
-        self._status(f"{total:,} animations of {len(self.groups):,} models. Pick one to preview it.")
+        if not self.groups:
+            self._status("This pack holds no animations.")
+        else:
+            self._status(f"{total:,} animations of {len(self.groups):,} models. Pick one to preview it.")
         self._fill()
 
     def _fill(self):
@@ -300,13 +321,30 @@ class AnimationsPage(QtWidgets.QWidget):
         export_animation(self.main_window, self.index, self.current[0], self.current[1], self.model.currentData(), kind)
 
 
-def _scan(game, options, signals):
+def _scan(pack, options, signals):
+    """The animations of one pack: its lines of the game's file list (resdb), read without listing the whole game."""
     from core.npk import anim_library
-    from gui.widgets.character_anim_export import _index
+    from core.npk.asset_paths import manifest_lines, normalize_path
+    from core.npk.related_archives import resource_location
+    from core.npk.stage_export import PackIndex, game_layers, resource_dirs
 
     try:
-        index = _index(game, options)
-        payload, error = (index, anim_library.scan(index.manifest())), ""
+        location = resource_location(pack)
+        if location is None:
+            raise ValueError("this pack is not inside a game's res folder")
+        game, _res, relative = location
+        prefix = normalize_path(str(relative.with_suffix(""))).lower() + "\\"
+        paths = []
+        for layer in game_layers(game):
+            for res in resource_dirs(layer):
+                resdb = res / "resdb"
+                if resdb.is_file():
+                    for line in manifest_lines(resdb):
+                        path = normalize_path(line.partition(" ")[2])
+                        if path.lower().startswith(prefix):
+                            paths.append(path)
+        # Files are read through an index of the game's packs, but its whole-game file list is never built
+        payload, error = (PackIndex(game, options), anim_library.scan(dict.fromkeys(paths)), pack), ""
     except Exception as exc:
         payload, error = None, str(exc)
     try:
@@ -457,6 +495,11 @@ def install(window) -> None:
 
     combo.currentIndexChanged.connect(changed)
     watch_page_filters(window)
+    # Another pack opened while the page is shown: list its animations; unloaded: empty the page
+    if hasattr(window, "loading_complete_signal"):
+        window.loading_complete_signal.connect(lambda: combo.currentData() == "animations" and page.activate())
+    if hasattr(window, "unload_npk_action"):
+        window.unload_npk_action.triggered.connect(lambda _checked=False: page.clear())
 
     # Right-click: the batch export of the character animations (moved here from the Tools menu)
     page.tree.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)

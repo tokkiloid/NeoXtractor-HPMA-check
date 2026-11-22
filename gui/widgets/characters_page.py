@@ -7,6 +7,7 @@ import os
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from core.logger import get_logger
 from core.npk.related_archives import RelatedArchiveSet, resource_location
 from gui import addons
 from gui.windows.character_folders_window import CharacterFoldersWindow
@@ -25,6 +26,49 @@ def install(app) -> None:
             _CharactersPage(window)
 
 
+# The scan's counts, which go to the log instead of the label under the tree
+SUMMARY_MARKS = ("textures identified", "available files in filter", "explicitly referenced packs")
+
+
+def tidy_filter_row(page) -> None:
+    """
+    Take the "All assets" type box and the "Show missing references" switch out of the page (every type is listed,
+    references the archive doesn't have never are), and send the scan counts to the log. The page's own filter reads
+    both widgets, so they stay as hidden, fixed settings.
+    """
+    row = page.layout().itemAt(0).layout() if page.layout() is not None and page.layout().count() else None
+    for name, settle in (
+        ("asset_filter", lambda w: w.setCurrentIndex(0)),
+        ("show_missing", lambda w: w.setChecked(False)),
+    ):
+        widget = getattr(page, name, None)
+        if widget is None:
+            continue
+        settle(widget)
+        if row is not None:
+            row.removeWidget(widget)
+        widget.hide()
+    label = getattr(page, "status_label", None)
+    if label is None or getattr(label, "_summary_to_log", False):
+        return
+    show = label.setText
+
+    def set_text(text, label=label, show=show):
+        text = str(text)
+        if any(mark in text for mark in SUMMARY_MARKS):
+            get_logger().info("Characters: %s", " | ".join(line.strip() for line in text.splitlines() if line.strip()))
+            show("")
+            label.hide()
+            return
+        show(text)
+        label.setVisible(bool(text))
+
+    label.setText = set_text
+    label._summary_to_log = True
+    if any(mark in label.text() for mark in SUMMARY_MARKS):
+        set_text(label.text())
+
+
 class _CharactersPage(QtCore.QObject):
     """Keeps the Characters page in step with the main window: its archive, filters, progress and menus."""
 
@@ -34,6 +78,7 @@ class _CharactersPage(QtCore.QObject):
         self.combo = window.entry_category_filter_combobox
         self.page = page = CharacterFoldersWindow(None, None, window)
         window._character_folders_window = page
+        tidy_filter_row(page)
         self.stack = addons.left_stack(window)
         self.stack.addWidget(page)
         addons.PAGES.add(CHARACTERS)
