@@ -524,8 +524,8 @@ class SceneViewerWindow(QtWidgets.QMainWindow):
 
         self._run(f"Loading {len(specs)} mesh(es)…", work)
 
-    def open_stage(self, game, scene_path, options=None):
-        """Load a stage with StageLoader (textures matched) into a new group."""
+    def open_stage(self, game, scene_path, options=None, data=None):
+        """Load a stage with StageLoader (textures matched) into a new group; data: the scene file's bytes, if read."""
         from core.npk.stage_export import PackIndex, StageLoader, read_options_for
 
         group = scene_path.rsplit("\\", 1)[-1].rsplit(".", 1)[0]
@@ -541,7 +541,7 @@ class SceneViewerWindow(QtWidgets.QMainWindow):
                 progress=lambda text, value, total: self.signals.progress.emit(text, value, total),
             )
             try:
-                objects = loader.load(scene_path)
+                objects = loader.load(scene_path) if data is None else loader.load_data(data, group)
                 qimages = {}
                 for obj in objects:
                     for part in obj["parts"]:

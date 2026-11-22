@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import io
 import json
-import math
-import os
 import re
-import struct
 import threading
 import xml.etree.ElementTree as ET
 from collections import OrderedDict
@@ -136,7 +133,6 @@ class PackIndex:
                 f'{stem}.{other}' for other in ('dds', 'tga', 'png', 'ktx', 'pvr', 'astc') if other != extension
             ]
         for variant in variants:
-            hashes = None
             for npk_path, relative in self._candidates(variant):
                 npk, signatures = self._pack(npk_path)
                 for signature in (murmur3_32(relative), murmur3_32(variant), mesh_hash(variant)):
@@ -636,8 +632,11 @@ class StageLoader:
         found = self.index.read(scene_path)
         if found is None:
             raise FileNotFoundError(f'Scene not found: {scene_path}')
-        _files, placements = parse_scene(found[0])
-        stage = Path(scene_path).stem
+        return self.load_data(found[0], Path(scene_path).stem)
+
+    def load_data(self, data: bytes, stage: str) -> list[dict]:
+        """Like load, for a scene file's own bytes (a scene picked in the file list); stage names the progress."""
+        _files, placements = parse_scene(data)
         objects = []
         for number, (name, path, matrix) in enumerate(placements):
             if self.cancelled():
