@@ -12,7 +12,7 @@ from pathlib import Path
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from core.npk.npk_file import NPKReadOptions
-from core.npk.stage_export import PackIndex, StageExporter, game_layers, game_root_for, read_options_for, resource_dirs
+from core.npk.stage_export import PackIndex, StageExporter, game_root_for, read_options_for, resource_dirs
 from gui import addons
 from gui.utils import scan_memory
 from gui.utils.file_list_theme import follow_file_list_theme, tree_icons
@@ -65,18 +65,6 @@ def _size_text(size: int) -> str:
     return f"{max(size, 0) / 1024:.0f} KB"
 
 
-class _SortableItem(QtWidgets.QTreeWidgetItem):
-    """Sorts the Scenes and Size columns by their numbers, the rest by text."""
-
-    def __lt__(self, other):
-        column = self.treeWidget().sortColumn() if self.treeWidget() is not None else 0
-        mine = self.data(column, QtCore.Qt.ItemDataRole.UserRole) if column else None
-        theirs = other.data(column, QtCore.Qt.ItemDataRole.UserRole) if column else None
-        if isinstance(mine, int) and isinstance(theirs, int):
-            return mine < theirs
-        return self.text(column).lower() < other.text(column).lower()
-
-
 class _Signals(QtCore.QObject):
     scenes_ready = QtCore.Signal(int, object, str)  # generation, scenes, error
     progress = QtCore.Signal(str, int, int)
@@ -109,15 +97,12 @@ class StagesPage(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.folder_label = QtWidgets.QLabel()
-        self.folder_label.setWordWrap(True)
-        layout.addWidget(self.folder_label)
 
         self.tree = QtWidgets.QTreeWidget()
         self._folder_icon, self._file_icon = tree_icons(self.tree)
         follow_file_list_theme(self.tree)
-        self.tree.setHeaderLabels(["Stage", "Scenes", "Size"])
-        self.tree.sortByColumn(0, QtCore.Qt.SortOrder.AscendingOrder)
+        self.tree.setColumnCount(3)  # stage, its scene count, size
+        self.tree.setHeaderHidden(True)
         self.tree.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
         self.tree.header().setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
         self.tree.itemSelectionChanged.connect(self._update_buttons)
@@ -224,11 +209,9 @@ class StagesPage(QtWidgets.QWidget):
         self._scanning = False
         self.tree.clear()
         if self.game is None:
-            self.folder_label.setText("")
             self.status.setText("")
             self._update_buttons()
             return
-        self.folder_label.setText("")
         self.status.setText("Reading stage list…")
         self._generation += 1
         generation, options, game = self._generation, self._read_options(), self.game
@@ -264,12 +247,9 @@ class StagesPage(QtWidgets.QWidget):
         scenes = [scene for scene in self._all_scenes if self.pack and scene.split("\\")[0].lower() == self.pack]
         sizes = self._sizes
         if not scenes:
-            self.folder_label.setText("")
             self.status.setText("")
             self._update_buttons()
             return
-        layers = game_layers(self.game)
-        self.folder_label.setText(f"Stages in {self.pack}.npk  ({'  +  '.join(str(layer) for layer in layers)})")
         groups: dict[tuple[str, str], list[str]] = {}
         for scene in scenes:
             parts = scene.split("\\")
@@ -282,34 +262,26 @@ class StagesPage(QtWidgets.QWidget):
                 stage = parts[-2] if len(parts) > 1 else Path(scene.replace("\\", "/")).stem
                 pack = parts[0] if len(parts) > 2 and parts[0].startswith("res_dlc") else ""
             groups.setdefault((stage, pack), []).append(scene)
-        self.tree.setSortingEnabled(False)
         self.tree.setUpdatesEnabled(False)
-        for (stage, pack), members in groups.items():
+        for (stage, pack), members in sorted(groups.items(), key=lambda kv: (kv[0][0].lower(), kv[0][1])):
             largest = max(sizes.get(scene, 0) for scene in members)
-            parent = _SortableItem([stage, str(len(members)), _size_text(largest)])
-            parent.setData(1, QtCore.Qt.ItemDataRole.UserRole, len(members))
-            parent.setData(2, QtCore.Qt.ItemDataRole.UserRole, largest)
+            parent = QtWidgets.QTreeWidgetItem([stage, str(len(members)), _size_text(largest)])
             parent.setToolTip(2, "Size of the stage's largest scene file; bigger usually means more objects.")
             parent.setIcon(0, self._folder_icon)
-            for scene in members:
+            for scene in sorted(members, key=str.lower):
                 parts = scene.split("\\")
                 at = len(parts) - 1 - parts[::-1].index(stage) if stage in parts[:-1] else len(parts) - 2
                 label = "\\".join(parts[at + 1 :])
                 if "scene" not in parts[:-1]:
                     label += f"   (from {parts[1] if len(parts) > 2 else parts[0]})"
-                child = _SortableItem([label, "", _size_text(sizes.get(scene, 0))])
+                child = QtWidgets.QTreeWidgetItem([label, "", _size_text(sizes.get(scene, 0))])
                 child.setData(0, QtCore.Qt.ItemDataRole.UserRole, scene)
-                child.setData(2, QtCore.Qt.ItemDataRole.UserRole, sizes.get(scene, 0))
                 child.setToolTip(0, scene)
                 child.setIcon(0, self._file_icon)
                 parent.addChild(child)
             self.tree.addTopLevelItem(parent)
         self.tree.setUpdatesEnabled(True)
-        self.tree.setSortingEnabled(True)
-        self.status.setText(
-            f"{len(groups)} stages, {len(scenes)} scenes. "
-            "Click a column header to sort; select scenes (or a stage) and export."
-        )
+        self.status.setText(f"{len(groups)} stages, {len(scenes)} scenes. Select scenes (or a stage) and export.")
         self.apply_filter(
             getattr(self.window_, "name_filter_input", None).text()
             if hasattr(self.window_, "name_filter_input")

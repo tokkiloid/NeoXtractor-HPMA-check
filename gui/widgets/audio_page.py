@@ -35,7 +35,8 @@ class AudioPage(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.tree = QtWidgets.QTreeWidget()
-        self.tree.setHeaderLabels(["Sound", "Files"])
+        self.tree.setColumnCount(2)  # the folder or sound, and a folder's file count
+        self.tree.setHeaderHidden(True)
         self.tree.setColumnWidth(0, 340)
         self.tree.setUniformRowHeights(True)
         self.tree.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)

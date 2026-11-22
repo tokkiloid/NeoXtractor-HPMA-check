@@ -68,8 +68,6 @@ class CharacterFoldersWindow(QtWidgets.QWidget):
         self.show_missing.setToolTip("Metadata paths absent from the loaded archive.")
         row.addWidget(self.show_missing)
         layout.addLayout(row)
-        self.explorer_heading = QtWidgets.QLabel("Characters Explorer")
-        layout.addWidget(self.explorer_heading)
         self.tree = QtWidgets.QTreeWidget()
         self._folder_icon, self._file_icon = tree_icons(self.tree)
         self.tree.setColumnCount(2)

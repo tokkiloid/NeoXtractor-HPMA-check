@@ -40,7 +40,8 @@ class AnimationsPage(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.tree = QtWidgets.QTreeWidget()
-        self.tree.setHeaderLabels(["Animation", "Clips"])
+        self.tree.setColumnCount(2)  # the folder or clip, and a folder's clip count
+        self.tree.setHeaderHidden(True)
         self.tree.setColumnWidth(0, 300)
         self.tree.setUniformRowHeights(True)
         self._folder_icon, self._file_icon = tree_icons(self.tree)
