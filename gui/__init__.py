@@ -19,6 +19,7 @@ def run():
 
     get_logger().info("Starting NeoXtractor in GUI mode...")
     addons.install_speedups()
+    addons.register_viewers()
 
     app = QtWidgets.QApplication(sys.argv)
 

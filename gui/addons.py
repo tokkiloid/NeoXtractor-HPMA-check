@@ -30,6 +30,16 @@ def install_speedups() -> None:
             get_logger().exception("Could not install %s", name)
 
 
+def register_viewers() -> None:
+    """Viewers added to NeoXtractor's list (the preview's dropdown, Open with): before the main window builds it."""
+    from gui.widgets import scene_preview
+
+    try:
+        scene_preview.register()
+    except Exception:
+        get_logger().exception("Could not add the Scene Viewer to the viewers")
+
+
 def install(app: QtWidgets.QApplication) -> None:
     """The pages and menus, in the order they appear in the category list."""
     from core.npk import layered_archives, wwise_audio, wwise_names
