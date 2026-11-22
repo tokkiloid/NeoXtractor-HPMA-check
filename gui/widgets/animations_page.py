@@ -12,7 +12,7 @@ import threading
 from PySide6 import QtCore, QtWidgets
 from core.logger import get_logger
 from gui import addons
-from gui.utils.file_list_theme import tree_icons
+from gui.utils.file_list_theme import follow_file_list_theme, tree_icons
 from gui.utils.page_filters import watch_page_filters
 
 GROUP_ROLE = QtCore.Qt.ItemDataRole.UserRole + 51
@@ -43,6 +43,7 @@ class AnimationsPage(QtWidgets.QWidget):
         self.tree.setColumnWidth(0, 300)
         self.tree.setUniformRowHeights(True)
         self._folder_icon, self._file_icon = tree_icons(self.tree)
+        follow_file_list_theme(self.tree)
         layout.addWidget(self.tree, 1)
 
         # The player, shown in the main window's viewer area while this page is open (see install)
@@ -240,6 +241,11 @@ class AnimationsPage(QtWidgets.QWidget):
         if error:
             self._show_clip_info([("Clip", clip_name), ("Owner", group.label), ("Error", error)])
         if payload is None:
+            # Nothing to play: the view empties instead of going on with the last clip that worked
+            if self.preview_object is not None and hasattr(self.view, "remove_objects"):
+                self.view.remove_objects([self.preview_object])
+                self.preview_object = None
+                self.view.update()
             return
         mesh, parts, clip, matched = payload
         self._show_clip_info(

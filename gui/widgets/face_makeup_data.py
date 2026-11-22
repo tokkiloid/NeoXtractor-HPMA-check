@@ -35,6 +35,16 @@ _LIBRARY: dict[str, object] = {}
 _LOCK = threading.Lock()
 
 
+def release_caches() -> None:
+    """Drop what the creator keeps between windows (game data, trimmed meshes): called when the last one closes."""
+    import gc
+
+    with _LOCK:
+        for cache in (_LIBRARY, _HALVES, _PUPIL_MODELS, _FACE_SOCKETS):
+            cache.clear()
+    gc.collect()
+
+
 def _library(game, options=None):
     """(MakeupLibrary, face folders {folder: [mesh paths]}, files {folder: [all files]}), built once per game."""
     from core.npk.face_makeup import MakeupLibrary

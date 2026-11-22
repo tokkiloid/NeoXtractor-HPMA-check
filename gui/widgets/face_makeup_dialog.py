@@ -27,6 +27,7 @@ from gui.widgets.face_makeup_data import (  # noqa: F401
     load_wardrobe_items,
     pose_items,
     prop_clip,
+    release_caches,
     without_old_eye_faces,
 )
 from gui.widgets.face_makeup_widgets import (  # noqa: F401
@@ -2146,7 +2147,15 @@ def open_dialog(main_window, folder=None) -> None:
     dialog = FaceMakeupDialog(main_window, game, folder)
     dialog.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
     _keep_with(main_window, dialog)
+    dialog.destroyed.connect(lambda *_args, w=main_window: _release_when_all_closed(w))
     dialog.show()
+
+
+def _release_when_all_closed(main_window) -> None:
+    """The last creator window is gone: its game data and trimmed meshes go too, freeing their memory."""
+    if not any(isinstance(window, FaceMakeupDialog) for window in main_window.__dict__.get("_creator_windows", [])):
+        _TRIMMED.clear()
+        release_caches()
 
 
 def _keep_with(main_window, window) -> None:

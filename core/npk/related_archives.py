@@ -20,7 +20,7 @@ from core.npk.detection import get_file_category
 from core.npk.npk_file import NPKFile
 from core.npk.scan_control import checkpoint, report_progress
 from core.npk.metadata_references import MetadataReferences
-from core.process_memory import check_scan_memory
+from core.process_memory import begin_scan, check_scan_memory
 
 METADATA_EXTENSIONS = {"mtl", "dat", "xml", "gim", "mtg"}
 BINARY_CACHE_BYTES = 32 * 1024 * 1024
@@ -82,6 +82,7 @@ class RelatedArchiveSet:
         self.warnings, self._missing_mounts = [], set()
         location = resource_location(self.file_path)
         self._resource_roots = resource_roots(location[0]) if location else []
+        begin_scan()
         for candidate in related_archive_paths(path):
             try:
                 self._add_archive(candidate, primary=True)

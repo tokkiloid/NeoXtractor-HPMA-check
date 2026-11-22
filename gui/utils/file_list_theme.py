@@ -66,6 +66,18 @@ def apply_file_list_theme(view, theme):
     view.viewport().update()
 
 
+def follow_file_list_theme(view) -> None:
+    """Draw the view as the file list is drawn, now and whenever the app's theme changes."""
+    from gui.theme import ThemeManager
+
+    try:
+        theme = ThemeManager.instance()
+    except RuntimeError:  # no app theme (tools, tests): Qt's own colours
+        return
+    apply_file_list_theme(view, theme)
+    theme.theme_changed.connect(lambda *_args: apply_file_list_theme(view, theme))
+
+
 def tree_icons(widget) -> tuple[QtGui.QIcon, QtGui.QIcon]:
     """The folder and file icons of the game-folder trees (Characters, Animations, Stages)."""
     style = widget.style()

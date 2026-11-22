@@ -15,12 +15,11 @@ from core.npk.npk_file import NPKReadOptions
 from core.npk.stage_export import PackIndex, StageExporter, game_layers, game_root_for, read_options_for, resource_dirs
 from gui import addons
 from gui.utils import scan_memory
-from gui.utils.file_list_theme import tree_icons
+from gui.utils.file_list_theme import follow_file_list_theme, tree_icons
 from gui.utils.page_filters import watch_page_filters
 
 STAGES_DATA = "stages"
 SETTING_GAME_FOLDER = "stage_export.game_folder"  # remembered for the other exports' fallback
-NO_STAGES_HINT = "Open scene.npk, or a DLC scene pack (res_dlc_…), to see its stages."
 SETTING_OUTPUT_FOLDER = "stage_export.output_folder"
 SETTING_FORMAT = "stage_export.format"
 
@@ -116,6 +115,7 @@ class StagesPage(QtWidgets.QWidget):
 
         self.tree = QtWidgets.QTreeWidget()
         self._folder_icon, self._file_icon = tree_icons(self.tree)
+        follow_file_list_theme(self.tree)
         self.tree.setHeaderLabels(["Stage", "Scenes", "Size"])
         self.tree.sortByColumn(0, QtCore.Qt.SortOrder.AscendingOrder)
         self.tree.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -224,7 +224,7 @@ class StagesPage(QtWidgets.QWidget):
         self._scanning = False
         self.tree.clear()
         if self.game is None:
-            self.folder_label.setText(NO_STAGES_HINT)
+            self.folder_label.setText("")
             self.status.setText("")
             self._update_buttons()
             return
@@ -264,7 +264,7 @@ class StagesPage(QtWidgets.QWidget):
         scenes = [scene for scene in self._all_scenes if self.pack and scene.split("\\")[0].lower() == self.pack]
         sizes = self._sizes
         if not scenes:
-            self.folder_label.setText(NO_STAGES_HINT)
+            self.folder_label.setText("")
             self.status.setText("")
             self._update_buttons()
             return
