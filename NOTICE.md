@@ -39,8 +39,8 @@ The branch starts from NeoXtractor commit `e9b3cdb` (19 April 2026) and adds the
 - Taken unchanged from NeoXtractor's main branch: `core/wem/` and `gui/widgets/viewers/bnk_viewer.py`.
 - New: the Main Character Creator (`gui/widgets/face_makeup_*`, `core/npk/face_makeup.py`, `hair_dye.py`,
   `accessory_sockets.py`, `game_tables.py`), character and animation exports (`core/mesh_converter/*`,
-  `gui/widgets/character_*`), the Animations, Stages and Scene Viewer pages, item names and sorting in the
-  Characters tab, the names of the game's sounds (`core/npk/wwise_names.py`), speed-ups (`core/fast_*.py`,
+  `gui/widgets/character_*`), the Animations, Stages and Scene Viewer pages, item names in the Characters
+  tab, the names of the game's sounds (`core/npk/wwise_names.py`), speed-ups (`core/fast_*.py`,
   `core/npk/metadata_cache.py`).
 
 ## Third-party data

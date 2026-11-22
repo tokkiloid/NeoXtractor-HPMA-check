@@ -37,7 +37,6 @@ def install(app: QtWidgets.QApplication) -> None:
         animations_page,
         characters_items,
         characters_page,
-        characters_sort,
         scene_viewer,
         stages_page,
     )
@@ -50,7 +49,6 @@ def install(app: QtWidgets.QApplication) -> None:
         ("the Scene Viewer", lambda: scene_viewer.install(app)),
         ("the Animations category", lambda: [animations_page.install(window) for window in windows]),
         ("the combined game installs", layered_archives.install),  # a pack joins its Documents patch copy
-        ("sorting in the Characters tab", lambda: characters_sort.install(app)),
         ("item names in the Characters tab", lambda: characters_items.install(app)),
         ("the Audio category", lambda: wwise_audio.install_category(app)),
         ("the sound bank labels", lambda: wwise_names.install(app)),  # numbered .wem sounds show their bank
