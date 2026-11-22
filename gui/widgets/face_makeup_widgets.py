@@ -224,6 +224,8 @@ QMenu#creatorPopover::item:selected { background: rgba(214, 170, 90, 55); }
 QMenu#creatorPopover::section { color: #d6aa5a; font-weight: bold; padding: 6px 8px 2px 8px; }
 QMenu#creatorPopover::separator { height: 1px; background: #3a3226; margin: 4px 6px; }
 #creatorRail { background: #161412; border-right: 1px solid #3a3226; }
+/* App themes give every widget a background (the dark theme: grey); the rail and the list keep their own */
+#creatorRail QWidget, #creatorPanel QWidget { background: transparent; }
 #creatorRail QToolButton { border: none; border-radius: 6px; padding: 2px; color: #cbb68e; }
 #creatorRail QToolButton:hover { background: transparent; }
 #creatorRail QToolButton:checked { background: rgba(214, 170, 90, 55); border-left: 3px solid #d6aa5a; }
