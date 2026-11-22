@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from PySide6 import QtCore, QtWidgets
 import shiboken6
 from core.npk.class_types import NPKEntry
-from core.process_memory import check_scan_memory, ScanMemoryLimitExceeded
+from core.process_memory import begin_scan, check_scan_memory, ScanMemoryLimitExceeded
 from gui.theme import ThemeManager
 from gui.utils.viewer import ALL_VIEWERS
 from gui.utils.character_scan import CharacterScanWorker
@@ -176,6 +176,7 @@ class CharacterFoldersWindow(QtWidgets.QWidget):
         worker.signals.finished.connect(self._scan_result)
         self._workers[generation] = worker
         self.scan_busy = True
+        begin_scan()
         self.tree.setEnabled(False)
         self.status_label.setText("Scanning character folders…")
         self.scan_started.emit()

@@ -84,10 +84,11 @@ def left_stack(window) -> QtWidgets.QStackedWidget:
         window.extract_button_widget.setVisible(window.unload_npk_action.isEnabled())
 
     combo.currentIndexChanged.connect(show_file_list)
-    # While a page is shown the file list is hidden: filtering it would only read every entry for nothing
-    apply_filter = window.filter.apply_filter
-    window.filter.apply_filter = lambda *args, **kwargs: (
-        None if combo.currentData() in PAGES else apply_filter(*args, **kwargs)
+    # While a page is shown the file list is hidden: filtering it would only read every entry for nothing. The
+    # filter's method is looked up on each call, so add-ons that extend it later (the sound names) still apply
+    entry_filter = window.filter
+    entry_filter.apply_filter = lambda *args, **kwargs: (
+        None if combo.currentData() in PAGES else type(entry_filter).apply_filter(entry_filter, *args, **kwargs)
     )
     return stack
 
