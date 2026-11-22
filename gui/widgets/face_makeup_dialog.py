@@ -13,6 +13,8 @@ from core.logger import get_logger
 from core.npk.accessory_sockets import apply_bind_offsets
 from gui.widgets.face_makeup_data import (  # noqa: F401
     KINDS,
+    OWL_POSE,
+    OWL_PREVIEW,
     STANDARD_POSE,
     WARDROBE,
     _hair_data,
@@ -25,6 +27,7 @@ from gui.widgets.face_makeup_data import (  # noqa: F401
     face_folder_of,
     load_face_items,
     load_wardrobe_items,
+    owl_clip,
     pose_items,
     prop_clip,
     release_caches,
@@ -436,6 +439,7 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             "brooch": "icon_huizhang",
             "bag": "icon_beibao_01",
             "wand": "icon_yimaojian_huanmozhang",
+            "owl": "icon_yimaojian_huanmaotouying",
         }
 
         def ward(kind):
@@ -472,7 +476,7 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             "hair": ("Hairstyle", [("tiles", "Hairstyle", self.hair, None)], "pic_fuzhuangdian_shaixuan_toufa", None),
             "pose": ("Pose", [("tiles", "Pose", self.pose, None)], "pic_fuzhuangdian_shaixuan_zhanzi", None),
         }
-        for kind in ("clothes", "hat", "bag", "wand"):
+        for kind in ("clothes", "hat", "bag", "wand", "owl"):
             if kind in self.wardrobe:
                 by_key[kind] = (wardrobe_labels[kind], [ward(kind)], wardrobe_icons[kind], None)
         for first, second in (("glasses", "earring"), ("scarf", "brooch")):
@@ -493,6 +497,7 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             "brows",
             "bag",
             "wand",
+            "owl",
             "pose",
         )
         categories = [(key,) + by_key[key] for key in order if key in by_key]
@@ -510,6 +515,7 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             "hat": "With a hat, the hairstyle's trimmed version from the hat is used.",
             "face": "Face shapes are the game's edited versions of this face; newer faces have none.",
             "wand": "Held in the right hand: it follows the hand when a pose plays.",
+            "owl": "The owl lands on the hand; any other change ends it. The owl pose shows it again.",
             "pose": "Plays in the 3D view; with None, the outfit's own idle or the Standard pose. Export ▼ saves it.",
         }
         self.category_buttons = QtWidgets.QButtonGroup(self)
@@ -1270,6 +1276,8 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             combo.currentIndexChanged.connect(self._schedule)
         for combo in self.wardrobe.values():  # no re-bake: only the changed piece reloads
             combo.currentIndexChanged.connect(self._wardrobe_changed)
+        if "owl" in self.wardrobe:
+            self.wardrobe["owl"].currentIndexChanged.connect(self._owl_picked)
         self.pose.currentIndexChanged.connect(self._pose_changed)
         self._face_changed()
         for button in self.export_buttons:
@@ -1568,6 +1576,8 @@ class FaceMakeupDialog(QtWidgets.QDialog):
         The clip that plays: the chosen pose, or with none chosen the worn outfit's own idle, else the Standard pose
         (as in the game).
         """
+        if self._owl_preview():
+            return OWL_PREVIEW
         choice = self.pose.currentData()
         if choice:
             return choice
@@ -1579,7 +1589,56 @@ class FaceMakeupDialog(QtWidgets.QDialog):
         )
         return own or (STANDARD_POSE if self.pose.findData(STANDARD_POSE) >= 0 else None)
 
+    def _look(self) -> list:
+        """Everything picked except the owl: when it changes, the owl's landing preview ends (as in the game)."""
+        combos = [self.face, self.shape, self.skin, self.hair_color1, self.hair_color2, self.pose]
+        combos += list(self.choices.values()) + [self.hair, self.preset]
+        combos += [combo for kind, combo in self.wardrobe.items() if kind != "owl"]
+        return [self._sex()] + [combo.currentData() for combo in combos]
+
+    def _owl_preview(self) -> bool:
+        """The owl just picked is landing on the hand: nothing else has changed since."""
+        look = getattr(self, "_owl_look", None)
+        if look is None:
+            return False
+        if look != self._look() or "owl" not in self.wardrobe or not self.wardrobe["owl"].currentData():
+            self._owl_look = None
+            if self.pose.currentData() == OWL_POSE:
+                self._set_pose_quietly(None)  # something else changed: back to the outfit's own idle
+            return False
+        return True
+
+    def _set_pose_quietly(self, clip: str | None):
+        """Select a pose in the list (its tiles follow) without playing it: the caller updates the view."""
+        self._pose_quiet = True
+        try:
+            self.pose.setCurrentIndex(max(0, self.pose.findData(clip)))
+        finally:
+            self._pose_quiet = False
+
+    def _owl_picked(self, _index=None):
+        """
+        An owl picked in its list lands on the hand, then is held, and the owl pose shows as chosen; with None the
+        owl goes away, and the owl pose with it.
+        """
+        quiet, self._owl_quiet = getattr(self, "_owl_quiet", False), False
+        if quiet:
+            return
+        picked = bool(self.wardrobe["owl"].currentData())
+        if picked or self.pose.currentData() == OWL_POSE:
+            self._set_pose_quietly(OWL_POSE if picked else None)
+        self._owl_look = self._look() if picked else None
+        self._owl_restart = picked
+        self._pose_changed()
+
     def _pose_changed(self, _index=None):
+        if getattr(self, "_pose_quiet", False):
+            return
+        owl = self.wardrobe.get("owl")
+        if self.pose_clip_name() == OWL_POSE and owl is not None and not owl.currentData() and owl.count() > 1:
+            # The owl pose needs an owl: the first one of the list, without its landing
+            self._owl_quiet = True
+            owl.setCurrentIndex(1)
         name = self.pose_clip_name()
         key = (self._sex(), name) if name else None
         if key is None or key in self.__dict__.setdefault("pose_clips", {}):
@@ -1645,9 +1704,18 @@ class FaceMakeupDialog(QtWidgets.QDialog):
 
             own = self.__dict__.setdefault("_prop_clips", {})
             name = self.pose_clip_name()
-            if (attach["gim"], name) not in own:
-                own[(attach["gim"], name)] = prop_clip(self.library, attach["gim"], name)
-            prop = own[(attach["gim"], name)]
+            if (attach["gim"], name, self._sex()) not in own:
+                own[(attach["gim"], name, self._sex())] = (
+                    owl_clip(self.library, attach["gim"], name, self._sex())
+                    if item.get("owl")
+                    else prop_clip(self.library, attach["gim"], name)
+                )
+            prop = own[(attach["gim"], name, self._sex())]
+            switch = getattr(getattr(clip, "clip", clip), "switch", None)  # the character's landing length
+            if prop is not None and switch is not None and hasattr(prop, "switch"):
+                from core.npk.neox_anim import SequenceClip
+
+                prop = SequenceClip(prop.first, prop.then, switch)
             playing = clip
             if prop is not None and attach["bone"] in clip.bone_names:
                 playing = AttachedClip(clip, prop, attach["bone"], attach["offset"], attach["tag"])
@@ -1911,6 +1979,9 @@ class FaceMakeupDialog(QtWidgets.QDialog):
         self.objects3d = objects
         if clip is not None:
             self.view3d.set_playing(True)
+            if getattr(self, "_owl_restart", False) and self.pose_clip_name() == OWL_PREVIEW:
+                self._owl_restart = False
+                self.view3d.restart_animation()  # the landing from its first frame
         if self._focused_face is None:
             # Framed once, when the first character appears; switching faces, outfits or sizes keeps the
             # camera where it is (the reset button and F frame the character again)
@@ -2132,7 +2203,8 @@ class FaceMakeupDialog(QtWidgets.QDialog):
                 self, "Export pose", "Pick a pose first (or an outfit that has its own idle)."
             )
             return
-        export_animations(self.main_window, self.game, self._sex(), [name], fmt, _game_options())
+        names = name.split("+")  # the owl preview: its landing and its holding idle
+        export_animations(self.main_window, self.game, self._sex(), names, fmt, _game_options())
 
 
 def open_dialog(main_window, folder=None) -> None:

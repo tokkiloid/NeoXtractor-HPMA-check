@@ -343,6 +343,30 @@ def matrix_quaternion(matrix) -> np.ndarray:
     return q / np.linalg.norm(q)
 
 
+class SequenceClip:
+    """Once the owl animation finishes, it switches to the idle pose with the owl."""
+
+    def __init__(self, first, then, switch: float | None = None):
+        self.first, self.then = first, then
+        self.switch = first.duration if switch is None else switch
+        self.name, self.loop, self.skeleton = then.name, True, first.skeleton
+        self.bone_names, self.parents = first.bone_names, first.parents
+        self.duration = self.switch + then.duration
+
+    def _part(self, time: float):
+        if time < self.switch:
+            return self.first, min(time, max(self.first.duration - 1e-6, 0.0))
+        return self.then, (time - self.switch) % self.then.duration if self.then.duration else 0.0
+
+    def local_matrices(self, time: float) -> np.ndarray:
+        clip, at = self._part(time)
+        return clip.local_matrices(at)
+
+    def world_matrices(self, time: float, root=None) -> np.ndarray:
+        clip, at = self._part(time)
+        return clip.world_matrices(at, root)
+
+
 class Clip:
     """A decoded animation bound to its skeleton, sampled as a loop."""
 
