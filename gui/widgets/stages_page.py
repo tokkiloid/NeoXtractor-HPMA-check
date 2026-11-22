@@ -12,7 +12,7 @@ from pathlib import Path
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from core.npk.npk_file import NPKReadOptions
-from core.npk.stage_export import PackIndex, StageExporter, game_layers, game_root_for, read_options_for, resource_dirs
+from core.npk.stage_export import PackIndex, StageExporter, game_root_for, read_options_for, resource_dirs
 from gui import addons
 from gui.utils import scan_memory
 from gui.utils.file_list_theme import follow_file_list_theme, tree_icons
@@ -97,9 +97,6 @@ class StagesPage(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.folder_label = QtWidgets.QLabel()
-        self.folder_label.setWordWrap(True)
-        layout.addWidget(self.folder_label)
 
         self.tree = QtWidgets.QTreeWidget()
         self._folder_icon, self._file_icon = tree_icons(self.tree)
@@ -212,11 +209,9 @@ class StagesPage(QtWidgets.QWidget):
         self._scanning = False
         self.tree.clear()
         if self.game is None:
-            self.folder_label.setText("")
             self.status.setText("")
             self._update_buttons()
             return
-        self.folder_label.setText("")
         self.status.setText("Reading stage list…")
         self._generation += 1
         generation, options, game = self._generation, self._read_options(), self.game
@@ -252,12 +247,9 @@ class StagesPage(QtWidgets.QWidget):
         scenes = [scene for scene in self._all_scenes if self.pack and scene.split("\\")[0].lower() == self.pack]
         sizes = self._sizes
         if not scenes:
-            self.folder_label.setText("")
             self.status.setText("")
             self._update_buttons()
             return
-        layers = game_layers(self.game)
-        self.folder_label.setText(f"Stages in {self.pack}.npk  ({'  +  '.join(str(layer) for layer in layers)})")
         groups: dict[tuple[str, str], list[str]] = {}
         for scene in scenes:
             parts = scene.split("\\")
