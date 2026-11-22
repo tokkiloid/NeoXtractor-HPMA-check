@@ -29,8 +29,8 @@ under Tools.
 1. In **Active Config**, pick **Harry Potter: Magic Awakened**.
 2. **File → Open File** and choose a `.npk` from the game's `res` folder (for example `res\model\character.npk`).
 3. The same pack in `res2`, `res3`, ... and the launcher's update folder (`Documents\res`) opens with it, and the
-   files show their real names. To open one pack on its own, untick **File → Include same-name res / resN copies
-   (HPMA)** before opening.
+   files show their real names. To open one pack on its own, untick **File → Load all same-name related
+   copies together (HPMA)** before opening.
 
 The category list under the search box picks what the left side shows: the usual file types, plus **Audio**,
 **Characters**, **Stages** and **Animations**.
@@ -65,8 +65,8 @@ game's wardrobe:
 - **Wand** holds one of the game's wand skins in the right hand. **Pose** plays a standing pose in the 3D view
   (the wand follows the hand). With no pose picked, an outfit that has its own idle plays it, as in the game.
 - **Export ▼** saves the character as GLB, PMX or OBJ, without animation (**PMX options** are in the same menu).
-  **Pose as VMD… / GLB…** in the same menu save the chosen pose on its own: a VMD for the exported PMX, or a GLB
-  on the game's default character. **Save texture ▼** saves the baked face, eye, eyebrow and hair textures.
+  **Pose as VMD… / GLB…** in the same menu save the pose that plays (the picked one, or the outfit's own idle) on
+  its own: a VMD for the exported PMX, or a GLB on the game's default character. **Save texture ▼** saves the baked face, eye, eyebrow and hair textures.
   **Add to Scene Viewer** sends the character there.
 
 ### Scene Viewer
