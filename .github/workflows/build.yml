@@ -14,9 +14,11 @@ jobs:
     name: Build on ${{ matrix.os }} ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     strategy:
+      # One system failing doesn't cancel the others' builds
+      fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             arch: x64
             asset_name: neoxtractor-linux
           - os: windows-latest
