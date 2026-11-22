@@ -12,8 +12,7 @@ shows is read from a game install the user already has.
 The branch starts from NeoXtractor commit `e9b3cdb` (19 April 2026) and adds the Harry Potter: Magic Awakened
 (HPMA) build on top, in two steps.
 
-**1. The HPMA build** (one commit, "Recover the HPMA build's source"). Its source had been lost and was rebuilt from
-the compiled build; every module compiles to the same bytecode as that build.
+**1. The HPMA build** (the commit "Harry Potter: Magic Awakened build").
 
 - New: `core/npk/asset_paths.py`, `related_archives.py`, `metadata_references.py` (real file names, same-name packs
   in `res`, `res2`, ...), `core/npk/character_catalog.py`, `character_folders.py`, `scan_control.py`,
@@ -26,7 +25,7 @@ the compiled build; every module compiles to the same bytecode as that build.
   `gui/windows/config_manager/edit_config_dialog.py`, `new_config_dialog.py`, `gui/windows/main_window.py`,
   `gui/windows/settings_window.py`.
 
-**2. Additions to the HPMA build** (the following commit).
+**2. Additions to the HPMA build** (the commit "HPMA build: creator, viewers and exports" and the ones after it).
 
 - Modified NeoXtractor files: `core/mesh_converter/formats/pmx.py` (MMD bone names, bone setup, fingers, rigid
   bodies, material and tail settings), `gui/__init__.py` (starts the additions below through `gui/addons.py`),
@@ -35,7 +34,8 @@ the compiled build; every module compiles to the same bytecode as that build.
   switch moved to `gui/widgets/characters_page.py`),
   `gui/utils/viewer.py` (registers the newer audio and sound bank viewers),
   `gui/widgets/viewers/audio_viewer.py` (NeoXtractor's main-branch audio viewer; the info line also names the
-  sound for HPMA).
+  sound for HPMA), and the build setup: `main.spec` (packs the audio decoder's data), `.python-version` and
+  `.github/workflows/build.yml` (any Python 3.13, Linux builds on Ubuntu 24.04).
 - Taken unchanged from NeoXtractor's main branch: `core/wem/` and `gui/widgets/viewers/bnk_viewer.py`.
 - New: the Main Character Creator (`gui/widgets/face_makeup_*`, `core/npk/face_makeup.py`, `hair_dye.py`,
   `accessory_sockets.py`, `game_tables.py`), character and animation exports (`core/mesh_converter/*`,
