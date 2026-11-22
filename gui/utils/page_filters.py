@@ -5,6 +5,7 @@ FILE_SEARCH = "Search by filename..."
 PAGE_SEARCH = {
     "animations": "Search animations or models (e.g. dance, run, hippogriff, idle)...",
     "stages": "Search stages or scenes...",
+    "audio": "Search sounds, folders or banks...",
 }
 FILE_TYPE_BOXES = ("filter_binary_filter", "filter_text_filter", "filter_slot_filter")
 
