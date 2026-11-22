@@ -181,11 +181,18 @@ WARDROBE = (
     ("brooch", "Brooch"),
     ("bag", "Bag"),
     ("wand", "Wand"),
+    ("owl", "Owl"),
 )
 WAND_ITEM = (200, 101)  # item type and sub_type of wand skins
 WAND_SOCKET = "attack_point"  # the wand tip's socket: wands are modelled in the space of its bone (the hand's prop)
 POSE_ACTION = 3  # quick_action rows of standing poses (站姿)
 STANDARD_POSE = "idle"  # the plain Standard pose (quick_action 1005), for outfits without one of their own
+OWL_ITEM = (200, 103)  # item type and sub_type of owls; their model is the character row named by mini_type
+OWL_FOLDER = "model\\items\\maotouying_all\\"
+# Picking an owl plays the landing on the hand, then the holding idle; the owl plays its own clips of the same names
+OWL_ARRIVE, OWL_HOLD = "buy_born_maotouying", "buy_idle_maotouying"
+OWL_PREVIEW = f"{OWL_ARRIVE}+{OWL_HOLD}"  # a pose name for "the first clip once, then the second looped"
+OWL_POSE = "xinshou_buy_idle_maotouying"  # the standing pose with the owl on the hand (持鸮而立)
 
 
 DRESS_SEXES = {1: ("male",), 2: ("female",), 3: ("male", "female")}
@@ -431,10 +438,96 @@ def _wardrobe(library, links):
     for per_sex in found.values():
         for entries in per_sex.values():
             entries.sort(key=lambda e: e["order"])
-    wands = _wands(library, english)
+    wands, owls = _wands(library, english), _owls(library, english)
     for per_sex in found.values():
         per_sex["wand"] = list(wands)
+        per_sex["owl"] = list(owls)
     return {"items": found, "masks": masks, "hidden": sorted(hidden)}
+
+
+def _owls(library, english) -> list[dict]:
+    """The released owls as wardrobe entries: item -> character row, whose model_file is the owl's .gim."""
+    from core.npk import game_tables
+
+    tables = library.tables
+    characters = tables.keyed_rows("character")
+    entries, seen = [], set()
+    for item_id, item in tables.keyed_rows("item").items():
+        if not isinstance(item, dict) or (item.get("type"), item.get("sub_type")) != OWL_ITEM or not item.get("launch"):
+            continue
+        gim = str((characters.get(item.get("mini_type")) or {}).get("model_file") or "").replace("/", "\\")
+        if not gim or gim.lower() in seen:
+            continue
+        seen.add(gim.lower())
+        mesh = _gim_mesh(library, gim)
+        title = english.get(item.get("name", ""), "").strip()
+        if title.lower() in ("null!", "null", "n/a"):
+            title = ""
+        stem = gim.rsplit("\\", 1)[-1].rsplit(".", 1)[0]
+        entries.append(
+            {
+                "name": f"{title}  ·  {stem}" if title else stem,
+                "path": mesh,
+                "icon": item.get("icon_path"),
+                "texture": None,
+                "sockets": [],
+                "idle": None,
+                "rarity": game_tables.item_rarity(tables, item_id),
+                "traits": game_tables.item_traits(tables, item_id),
+                "tags": game_tables.item_tags(tables, item_id),
+                "order": (gim.lower(), False, ""),
+            }
+        )
+    entries.sort(key=lambda entry: entry["order"])
+    return entries
+
+
+def _owl_on_root(library, items, path, sex, report):
+    """
+    An owl at the character's root: its clips (landing, holding) move it about the body in the character's space,
+    so it is placed like the props the game's code brings. Tagged, so it shows only while an owl clip plays.
+    """
+    from core.npk import accessory_sockets
+
+    rest = accessory_sockets.for_library(library).rest(sex)
+    if "biped" not in rest:
+        report.append("Owl: the character rig's root bone was not found")
+        return []
+    gim = path.rsplit(".", 1)[0] + ".gim"
+    owl = []
+    for item in items:
+        name = item["name"]
+        owl.append(
+            dict(
+                item,
+                mesh=accessory_sockets._place(item["mesh"], rest["biped"], "biped", rest["biped"], name),
+                attach={"gim": gim, "bone": "biped", "offset": np.eye(4), "tag": name},
+                owl=True,
+            )
+        )
+    return owl
+
+
+def owl_clip(library, gim: str, character_clip: str, sex: str):
+    """
+    The owl's own clip for a character clip: its female or male version first (buy_born_maotouying_nv), then the
+    plain one; the landing-then-holding preview pairs the owl's two; the owl pose, which has no owl clip, uses the
+    holding one. None when the owl has none.
+    """
+    from core.npk.neox_anim import SequenceClip
+
+    if "+" in character_clip:
+        first, then = character_clip.split("+", 1)
+        parts = [owl_clip(library, gim, name, sex) for name in (first, then)]
+        return SequenceClip(*parts) if all(parts) else None
+    suffix = "_nv" if sex == "female" else "_nan"
+    for name in (character_clip + suffix, character_clip) + (
+        (OWL_HOLD + suffix, OWL_HOLD) if character_clip == OWL_POSE else ()
+    ):
+        clip = prop_clip(library, gim, name)
+        if clip is not None:
+            return clip
+    return None
 
 
 def _gim_mesh(library, gim: str) -> str:
@@ -495,8 +588,12 @@ def _wands(library, english) -> list[dict]:
     return entries
 
 
+def is_owl(path: str | None) -> bool:
+    return bool(path) and path.lower().startswith(OWL_FOLDER)
+
+
 def is_wand(path: str | None) -> bool:
-    return bool(path) and path.lower().startswith("model\\items\\")
+    return bool(path) and path.lower().startswith("model\\items\\") and not is_owl(path)
 
 
 def _hold_wand(library, items, sex, report):
@@ -621,12 +718,18 @@ def _pose_props(tables) -> dict[tuple[str, str], list[int]]:
 
 
 def pose_items(items, clip: str | None, wand: bool = True) -> list[dict]:
-    """The pieces shown while a clip plays: props of other clips are put away, and the wand when the pose has none."""
+    """
+    The pieces shown while a clip plays: props of other clips are put away, the wand when the pose has none, and the
+    owl unless an owl clip plays (the landing preview or the owl pose).
+    """
     name = (clip or "").lower()
+    owl = name in (OWL_PREVIEW, OWL_POSE)
     return [
         item
         for item in items
-        if (not name or not item.get("clips") or name in item["clips"]) and (wand or not item.get("wand"))
+        if (not name or not item.get("clips") or name in item["clips"])
+        and (wand or not item.get("wand"))
+        and (owl or not item.get("owl"))
     ]
 
 
@@ -680,7 +783,23 @@ def prop_clip(library, gim: str, clip_name: str):
     from core.npk.anim_library import read_animation_data
 
     stem = gim.rsplit(".", 1)[0]
-    config, skeleton = library.index.read(stem + ".animconfig"), library.index.read(stem + ".skeleton")
+    config_name, skeleton_name = stem + ".animconfig", stem + ".skeleton"
+    found = library.index.read(gim)
+    if found is not None:
+        # The .gim names its skeleton and clip list, which may carry a hash (hengbanlinxiao_aa8c7b.animconfig)
+        try:
+            node = ET.fromstring(found[0])
+            for tag in ("SkeletonFile", "AnimationConfigFile"):
+                value = node.find(f"{tag}/FileName")
+                if value is not None and value.get("Value"):
+                    named = ntpath.normpath(ntpath.join(ntpath.dirname(stem), value.get("Value").replace("/", "\\")))
+                    if tag == "SkeletonFile":
+                        skeleton_name = named
+                    else:
+                        config_name = named
+        except ET.ParseError:
+            get_logger().debug("Unreadable model file %s", gim, exc_info=True)
+    config, skeleton = library.index.read(config_name), library.index.read(skeleton_name)
     if config is None or skeleton is None or not clip_name:
         return None
     try:
@@ -695,7 +814,7 @@ def prop_clip(library, gim: str, clip_name: str):
     if not file:
         return None
     file = file.replace("/", "\\")
-    folder = ntpath.join(ntpath.dirname(stem), ntpath.dirname(file))
+    folder = ntpath.normpath(ntpath.join(ntpath.dirname(config_name), ntpath.dirname(file)))
 
     def read(path):
         found = library.index.read(path)
@@ -710,8 +829,16 @@ def prop_clip(library, gim: str, clip_name: str):
 
 
 def load_pose_clip(library, sex: str, clip_name: str):
-    """A pose's neox_anim.Clip on the character rig, its bones named like the character meshes'."""
+    """
+    A pose's neox_anim.Clip on the character rig, its bones named like the character meshes'. "first+then" names the
+    first clip played once, then the second looped (the owl preview).
+    """
     from core.mesh_converter import character_anim
+    from core.npk.neox_anim import SequenceClip
+
+    if "+" in clip_name:
+        first, then = clip_name.split("+", 1)
+        return SequenceClip(load_pose_clip(library, sex, first), load_pose_clip(library, sex, then))
 
     def read(path):
         found = library.index.read(path)
@@ -959,6 +1086,8 @@ def load_wardrobe_items(library, path, report, texture=None, sockets=(), sex=Non
     from core.npk.stage_export import StageLoader
 
     items = load_face_items(library, [path], [], None, report)
+    if is_owl(path):
+        return _owl_on_root(library, items, path, sex or "female", report)
     if is_wand(path):
         return _hold_wand(library, items, sex or "female", report)
     if texture:

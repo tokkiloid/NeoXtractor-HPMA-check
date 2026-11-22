@@ -65,6 +65,7 @@ UI_SPRITES = {
     "icon_huizhang",
     "pic_fuzhuangdian_shaixuan_beibao",
     "icon_yimaojian_huanmozhang",
+    "icon_yimaojian_huanmaotouying",
     "pic_fuzhuangdian_shaixuan_zhanzi",
     "pic_fushi_diban",
     "pic_xuanzhong",

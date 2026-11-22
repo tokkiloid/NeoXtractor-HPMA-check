@@ -225,7 +225,11 @@ class SceneObject:
         self._skeleton_of_bone = np.array([skeleton_index.get(name, -1) for name in mesh.bone_name])
         self._carried_by = self._nearest_animated(mesh)
         binds = np.array([np.asarray(m, float).T for m in skin_bind(mesh)])  # row-vector -> column-vector
-        self._inverse_binds = np.linalg.inv(binds)
+        # Some models carry unused bones with an all-zero bind (the owls): those stay put instead of failing the rest
+        usable = np.abs(np.linalg.det(binds)) > 1e-12
+        self._inverse_binds = np.tile(np.eye(4), (len(binds), 1, 1))
+        if usable.any():
+            self._inverse_binds[usable] = np.linalg.inv(binds[usable])
         bones = len(mesh.bone_name)
         joints = np.array([list(b)[:4] + [bones] * (4 - len(b)) for b in mesh.vertex_bone], np.int64)
         weights = np.array([list(w)[:4] + [0.0] * (4 - len(w)) for w in mesh.vertex_weight], float)
@@ -705,6 +709,12 @@ class SceneRenderWidget(QtWidgets.QRhiWidget, CameraController):
         if self.playing:
             return self._time_offset + self._clock.elapsed() / 1000.0
         return self._time_offset
+
+    def restart_animation(self):
+        """Play from the start (the owl's landing from its first frame)."""
+        self._time_offset = 0.0
+        self._clock.restart()
+        self.update()
 
     def set_playing(self, playing: bool):
         if playing == self.playing:
