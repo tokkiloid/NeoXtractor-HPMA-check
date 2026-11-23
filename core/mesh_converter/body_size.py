@@ -91,7 +91,7 @@ class BodyDeformer:
         binds = {name: worlds[i].T.copy() for i, name in enumerate(names)}  # row-vector
         parents = {name: (names[p] if p >= 0 else None) for name, p in zip(names, deformer_skeleton.parents)}
         effective, carried, positions = {}, {}, {}
-        for index, name in enumerate(names):  # skeleton files list parents before children
+        for name in names:  # skeleton files list parents before children
             parent = parents[name]
             own, carry = entries.get(name, (np.ones(3), False))
             inherited = carried.get(parent, np.ones(3))

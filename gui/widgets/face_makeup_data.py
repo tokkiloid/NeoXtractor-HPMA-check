@@ -451,9 +451,29 @@ def _wardrobe(library, links):
     return {"items": found, "masks": masks, "hidden": sorted(hidden)}
 
 
+def _item_entry(tables, english, item_id, item, path: str, stem: str, order: str, sockets=()) -> dict:
+    """A wardrobe entry for an item drawn by one model (owls, wands, pets): "English name  ·  model", or the model."""
+    from core.npk import game_tables
+
+    title = english.get(item.get("name", ""), "").strip()
+    if title.lower() in ("null!", "null", "n/a"):
+        title = ""
+    return {
+        "name": f"{title}  ·  {stem}" if title else stem,
+        "path": path,
+        "icon": item.get("icon_path"),
+        "texture": None,
+        "sockets": list(sockets),
+        "idle": None,
+        "rarity": game_tables.item_rarity(tables, item_id),
+        "traits": game_tables.item_traits(tables, item_id),
+        "tags": game_tables.item_tags(tables, item_id),
+        "order": (order, False, ""),
+    }
+
+
 def _owls(library, english) -> list[dict]:
     """The released owls as wardrobe entries: item -> character row, whose model_file is the owl's .gim."""
-    from core.npk import game_tables
 
     tables = library.tables
     characters = tables.keyed_rows("character")
@@ -465,25 +485,8 @@ def _owls(library, english) -> list[dict]:
         if not gim or gim.lower() in seen:
             continue
         seen.add(gim.lower())
-        mesh = _gim_mesh(library, gim)
-        title = english.get(item.get("name", ""), "").strip()
-        if title.lower() in ("null!", "null", "n/a"):
-            title = ""
         stem = gim.rsplit("\\", 1)[-1].rsplit(".", 1)[0]
-        entries.append(
-            {
-                "name": f"{title}  ·  {stem}" if title else stem,
-                "path": mesh,
-                "icon": item.get("icon_path"),
-                "texture": None,
-                "sockets": [],
-                "idle": None,
-                "rarity": game_tables.item_rarity(tables, item_id),
-                "traits": game_tables.item_traits(tables, item_id),
-                "tags": game_tables.item_tags(tables, item_id),
-                "order": (gim.lower(), False, ""),
-            }
-        )
+        entries.append(_item_entry(tables, english, item_id, item, _gim_mesh(library, gim), stem, gim.lower()))
     entries.sort(key=lambda entry: entry["order"])
     return entries
 
@@ -542,8 +545,6 @@ def _pets(library, english) -> list[dict]:
     .gim. Its sockets entry carries what the pet needs: ("pet", .gim, the rig socket it rides on or "" for the
     floor, its own idle, its scale).
     """
-    from core.npk import game_tables
-
     tables = library.tables
     characters, beasts = tables.keyed_rows("character"), tables.keyed_rows("beasts_list")
     entries = []
@@ -554,26 +555,11 @@ def _pets(library, english) -> list[dict]:
         gim = str((characters.get(beast.get("model_id")) or {}).get("model_file") or "").replace("/", "\\")
         if not gim:
             continue
-        title = english.get(item.get("name", ""), "").strip()
-        if title.lower() in ("null!", "null", "n/a"):
-            title = ""
         stem = gim.rsplit("\\", 1)[-1].rsplit(".", 1)[0]
         socket = beast.get("shoulder_socket") or ""
         pet = ("pet", gim, socket, beast.get("shoulder_idle_anim") or "", _pet_scale(library, gim, socket, beast))
-        entries.append(
-            {
-                "name": f"{title}  ·  {stem}" if title else stem,
-                "path": _gim_mesh(library, gim),
-                "icon": item.get("icon_path"),
-                "texture": None,
-                "sockets": [pet],
-                "idle": None,
-                "rarity": game_tables.item_rarity(tables, item_id),
-                "traits": game_tables.item_traits(tables, item_id),
-                "tags": game_tables.item_tags(tables, item_id),
-                "order": (str(item_id).zfill(8), False, ""),
-            }
-        )
+        mesh = _gim_mesh(library, gim)
+        entries.append(_item_entry(tables, english, item_id, item, mesh, stem, str(item_id).zfill(8), [pet]))
     entries.sort(key=lambda entry: entry["order"])
     return entries
 
@@ -654,8 +640,6 @@ def _wands(library, english) -> list[dict]:
     The wand skins as wardrobe entries: item -> wand row -> wand_wood row, whose .gim is the model
     (model\\items\\mozhang\\...). Both sexes hold the same wands.
     """
-    from core.npk import game_tables
-
     tables = library.tables
     wands, woods = tables.keyed_rows("wand"), tables.keyed_rows("wand_wood")
     entries, seen = [], set()
@@ -666,27 +650,12 @@ def _wands(library, english) -> list[dict]:
         if not gim:
             continue
         mesh = _gim_mesh(library, gim.replace("/", "\\"))
-        title = english.get(item.get("name", ""), "").strip()
-        if title.lower() in ("null!", "null", "n/a"):
-            title = ""
         stem = mesh.rsplit("\\", 1)[-1].rsplit(".", 1)[0]
-        if (mesh.lower(), title) in seen:
+        entry = _item_entry(tables, english, item_id, item, mesh, stem, mesh.lower())
+        if (mesh.lower(), entry["name"]) in seen:
             continue
-        seen.add((mesh.lower(), title))
-        entries.append(
-            {
-                "name": f"{title}  ·  {stem}" if title else stem,
-                "path": mesh,
-                "icon": item.get("icon_path"),
-                "texture": None,
-                "sockets": [],
-                "idle": None,
-                "rarity": game_tables.item_rarity(tables, item_id),
-                "traits": game_tables.item_traits(tables, item_id),
-                "tags": game_tables.item_tags(tables, item_id),
-                "order": (mesh.lower(), False, ""),
-            }
-        )
+        seen.add((mesh.lower(), entry["name"]))
+        entries.append(entry)
     entries.sort(key=lambda entry: entry["order"])
     return entries
 
@@ -1338,7 +1307,7 @@ def face_presets(library, faces, files) -> list[dict]:
             if isinstance(row, dict)
         }
         item_of = {}
-        for item_id, row in sorted(tables.keyed_rows("item").items(), key=lambda kv: str(kv[0])):
+        for _item_id, row in sorted(tables.keyed_rows("item").items(), key=lambda kv: str(kv[0])):
             if isinstance(row, dict) and row.get("type") == 200 and row.get("mini_type"):
                 item_of.setdefault(row["mini_type"], row)
         rows = sorted(
@@ -1522,8 +1491,6 @@ def dress_face_items(library, items, sex, face, look, baked, eye, brow):
     Copies of the face items wearing the look: the baked face texture (split into left/right halves
     when the look has a one-cheek decal), the iris and eyebrow textures. Returns (items, eye meshes dressed).
     """
-    from core.npk import face_makeup
-
     sides = tuple(baked)
     output, eye_meshes = [], 0
     # Faces have either old one-piece eyeballs (<sex>_eye_jyq_NN) or separate left/right eyes. Prefer the

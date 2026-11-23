@@ -6,6 +6,11 @@ game's sound names. It is made mostly for Harry Potter: Magic Awakened, though y
 on the NeoX engine. Just keep in mind that this fork was made with HPMA in mind only. I'd really appreciate help from
 other fans, so we can make the creator as cool as possible.
 
+> **Please don't use this project, or anything extracted with it, for commercial purposes or suggestive
+> content.** The code is free software under the AGPL v3, but the game's models, textures and sounds belong
+> to NetEase and Warner Bros. and stay under their terms, which don't allow that. Respect the game, its
+> creators and its community.
+
 Licensed under the GNU AGPL v3.0, like NeoXtractor: see [LICENSE](LICENSE). What was changed, and the third-party
 data used, is listed in [NOTICE.md](NOTICE.md). No game files are included.
 

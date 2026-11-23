@@ -152,7 +152,6 @@ def _to_s16(data: bytes, bits: int, little_endian: bool) -> bytes:
         out = bytearray(count * 2)
         size = len(data)
         step = 3
-        index = 0
         for i in range(count):
             offset = i * step
             if offset + step > size:

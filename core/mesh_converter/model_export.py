@@ -241,7 +241,7 @@ def _add_animations(gltf, items, mesh, bind_worlds, first_joint, accessor):
         for name, joint in joints.items():
             animated_worlds[joint] = np.array([_mirror(pose) for pose in poses[:, skeleton_index[name]]])
         input_accessor = accessor(times.reshape(-1, 1), 5126, "SCALAR", minmax=True)
-        for name, joint in joints.items():
+        for joint in joints.values():
             parent = mesh.bone_parent[joint]
             if parent in animated_worlds:
                 parents = animated_worlds[parent]
@@ -464,7 +464,7 @@ def write_obj(items: list[dict], target) -> Path:
     normals = np.asarray(mesh.normal, float) @ MIRROR.T
     uvs = np.asarray(mesh.uv, float)
     faces = np.asarray(mesh.face, np.int64)[:, [0, 2, 1]] + 1  # mirrored, so flip the winding
-    lines = [f"# NeoXtractor HPMA model export", f"mtllib {target.stem}.mtl"]
+    lines = ["# NeoXtractor HPMA model export", f"mtllib {target.stem}.mtl"]
     lines += [f"v {x:.6f} {y:.6f} {z:.6f}" for x, y, z in positions]
     lines += [f"vt {u:.6f} {1.0 - v:.6f}" for u, v in uvs]  # OBJ's V runs bottom-up
     lines += [f"vn {x:.6f} {y:.6f} {z:.6f}" for x, y, z in normals]
