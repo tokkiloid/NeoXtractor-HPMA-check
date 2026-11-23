@@ -734,7 +734,12 @@ class SceneRenderWidget(QtWidgets.QRhiWidget, CameraController):
             return False
         self._posed_at = now
         for obj in animated:
-            data = obj.pose(now)
+            try:
+                data = obj.pose(now)
+            except Exception:  # one broken clip stops only its own object, not the whole view
+                get_logger().exception("Could not pose %s", obj.name)
+                obj.clip = None
+                continue
             updates.updateDynamicBuffer(obj.vbuf, 0, data.nbytes, _blob(data))
         if self.show_bones:
             self._bones_dirty = True

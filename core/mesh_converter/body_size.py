@@ -237,7 +237,13 @@ class AdultClip:
         for index, parent in enumerate(self.parents[: len(local)]):
             world[index] = (world[parent] if parent >= 0 else base) @ local[index]
         count = len(world)
-        around = world @ self._stretch[:count] @ np.linalg.inv(world)  # each deformed bone's stretch, in place
+        # Each deformed bone's stretch, in place; bones a clip hides by scaling them to nothing (the owl clips)
+        # have no inverse and stay as they are
+        inverse = np.tile(np.eye(4), (count, 1, 1))
+        usable = np.abs(np.linalg.det(world)) > 1e-12
+        inverse[usable] = np.linalg.inv(world[usable])
+        stretch = np.where(usable[:, None, None], self._stretch[:count], np.eye(4))
+        around = world @ stretch @ inverse
         world = around[self._owners[:count]] @ world
         if root is None:
             self._last_world = (time, world)

@@ -1603,19 +1603,37 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             return False
         if look != self._look() or "owl" not in self.wardrobe or not self.wardrobe["owl"].currentData():
             self._owl_look = None
+            if self.pose.currentData() == OWL_POSE:
+                self._set_pose_quietly(None)  # something else changed: back to the outfit's own idle
             return False
         return True
 
+    def _set_pose_quietly(self, clip: str | None):
+        """Select a pose in the list (its tiles follow) without playing it: the caller updates the view."""
+        self._pose_quiet = True
+        try:
+            self.pose.setCurrentIndex(max(0, self.pose.findData(clip)))
+        finally:
+            self._pose_quiet = False
+
     def _owl_picked(self, _index=None):
-        """An owl picked in its list lands on the hand, then is held; with None the owl goes away."""
+        """
+        An owl picked in its list lands on the hand, then is held, and the owl pose shows as chosen; with None the
+        owl goes away, and the owl pose with it.
+        """
         quiet, self._owl_quiet = getattr(self, "_owl_quiet", False), False
         if quiet:
             return
-        self._owl_look = self._look() if self.wardrobe["owl"].currentData() else None
-        self._owl_restart = self._owl_look is not None
+        picked = bool(self.wardrobe["owl"].currentData())
+        if picked or self.pose.currentData() == OWL_POSE:
+            self._set_pose_quietly(OWL_POSE if picked else None)
+        self._owl_look = self._look() if picked else None
+        self._owl_restart = picked
         self._pose_changed()
 
     def _pose_changed(self, _index=None):
+        if getattr(self, "_pose_quiet", False):
+            return
         owl = self.wardrobe.get("owl")
         if self.pose_clip_name() == OWL_POSE and owl is not None and not owl.currentData() and owl.count() > 1:
             # The owl pose needs an owl: the first one of the list, without its landing
