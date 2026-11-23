@@ -43,6 +43,7 @@ UI_SHEETS = tuple(
     "ui\\_com_image\\icon\\plist",
     "ui\\spontaneous_move_chess\\resource\\spontaneous_move_chess_guide1",
     "ui\\senior_tailor\\resource\\senior_tailor_main1",
+    "ui\\notice_panel\\resource\\custom",  # the pet button's paw
 )  # the wardrobe filter's ticks and frame
 
 
@@ -66,6 +67,7 @@ UI_SPRITES = {
     "pic_fuzhuangdian_shaixuan_beibao",
     "icon_yimaojian_huanmozhang",
     "icon_yimaojian_huanmaotouying",
+    "icon_shenqidongwu",
     "pic_fuzhuangdian_shaixuan_zhanzi",
     "pic_fushi_diban",
     "pic_xuanzhong",
