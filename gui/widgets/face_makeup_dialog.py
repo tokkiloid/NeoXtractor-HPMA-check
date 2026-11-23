@@ -625,9 +625,7 @@ class FaceMakeupDialog(QtWidgets.QDialog):
         self.dye_original = _RoundButton("Original hair colour", self.sprites, sprite="pic_chuangjue_wu", text="—")
         self.dye_original.clicked.connect(self._dye_original)
         self.dye_buttons = []
-        for number, (combo, tip) in enumerate(
-            ((self.hair_color1, "Hair colour (main)"), (self.hair_color2, "Second hair colour (two-tone)"))
-        ):
+        for number, tip in enumerate(("Hair colour (main)", "Second hair colour (two-tone)")):
             button = _RoundButton(tip, self.sprites, sprite="pic_moyao", text=str(number + 1))
             button.clicked.connect(lambda _checked=False, number=number: self._pick_dye(number))
             self.dye_buttons.append(button)
@@ -637,9 +635,7 @@ class FaceMakeupDialog(QtWidgets.QDialog):
         self.dye_add.clicked.connect(lambda: self._pick_dye(1))
         self.size_buttons = QtWidgets.QButtonGroup(self)
         size_widgets = []
-        for number, (key, tip) in enumerate(
-            (("original", "Body size I (as modelled)"), ("adult", "Body size II (grown-up)"))
-        ):
+        for number, tip in enumerate(("Body size I (as modelled)", "Body size II (grown-up)")):
             button = _RoundButton(tip, self.sprites, sprite="pic_tixing_xuanzhong", text="I" * (number + 1))
             button.badge = "I" * (number + 1)
             button.setCheckable(True)
@@ -1296,7 +1292,7 @@ class FaceMakeupDialog(QtWidgets.QDialog):
 
     def _set_icons(self, icons):
         self._icons_cache = icons
-        for kind, combo in self.choices.items():
+        for combo in self.choices.values():
             for row in range(combo.count()):
                 option = combo.itemData(row)
                 image = icons.get((option.kind, option.id)) if option is not None else None
@@ -1702,24 +1698,26 @@ class FaceMakeupDialog(QtWidgets.QDialog):
         if clip is None or not attach:
             return clip
         cache = self.__dict__.setdefault("_attached_clips", {})
+        if cache and next(iter(cache.values()))[1] is not clip:
+            cache.clear()  # the view plays one character clip: pieces built for an earlier one are let go
         key = (id(item["mesh"]), id(clip))
         if key not in cache:
             from core.npk.accessory_sockets import AttachedClip
+            from core.npk.neox_anim import SequenceClip
 
             own = self.__dict__.setdefault("_prop_clips", {})
             name = attach.get("clip") or self.pose_clip_name()  # a pet plays its own idle whatever the pose
-            if (attach["gim"], name, self._sex()) not in own:
+            prop_key = (attach["gim"], name, self._sex())
+            if prop_key not in own:
                 if item.get("owl"):
-                    own[(attach["gim"], name, self._sex())] = owl_clip(self.library, attach["gim"], name, self._sex())
+                    own[prop_key] = owl_clip(self.library, attach["gim"], name, self._sex())
                 elif item.get("pet"):
-                    own[(attach["gim"], name, self._sex())] = pet_clip(self.library, attach["gim"], name)
+                    own[prop_key] = pet_clip(self.library, attach["gim"], name)
                 else:
-                    own[(attach["gim"], name, self._sex())] = prop_clip(self.library, attach["gim"], name)
-            prop = own[(attach["gim"], name, self._sex())]
+                    own[prop_key] = prop_clip(self.library, attach["gim"], name)
+            prop = own[prop_key]
             switch = getattr(getattr(clip, "clip", clip), "switch", None)  # the character's landing length
-            if prop is not None and switch is not None and hasattr(prop, "switch"):
-                from core.npk.neox_anim import SequenceClip
-
+            if isinstance(prop, SequenceClip) and switch is not None:
                 prop = SequenceClip(prop.first, prop.then, switch)
             playing = clip
             if prop is not None and attach["bone"] in clip.bone_names:

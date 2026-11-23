@@ -17,7 +17,6 @@ from gui.utils.character_tree_index import CharacterTreeIndex
 PATH_ROLE = QtCore.Qt.ItemDataRole.UserRole
 ENTRY_ROLE = PATH_ROLE + 1
 KIND_ROLE = PATH_ROLE + 2
-VISIBLE_ASSET_ROLE = PATH_ROLE + 3
 FOLDER_PATH_ROLE = PATH_ROLE + 4
 ASSET_KEY_ROLE = PATH_ROLE + 5
 LAZY_ROLE = PATH_ROLE + 6

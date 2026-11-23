@@ -142,7 +142,6 @@ def _install_panel(page):
     status = getattr(page, "status_label", None)
     position = layout.indexOf(status) if status is not None else -1
     layout.insertWidget(position if position >= 0 else layout.count(), panel)
-    page._item_panel = (panel, icon, text)
 
     def show_for(item, _previous=None):
         link = None

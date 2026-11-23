@@ -383,7 +383,7 @@ class RelatedArchiveSet:
                 get_metadata_paths=self.get_metadata_paths,
                 get_character_folder_paths=self.get_character_folder_paths,
                 resolve_asset_path=lambda path, s=source: self.resolve_asset_path(path, s, cancelled=cancelled),
-                get_manifest_paths=lambda **kw: self.manifest_paths_for(source, **kw),
+                get_manifest_paths=lambda s=source, **kw: self.manifest_paths_for(s, **kw),
             )
             catalog = build_character_catalog(scope, roots, names, progress=progress, cancelled=cancelled)
             manifest_used |= catalog.manifest_used

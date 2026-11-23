@@ -4,7 +4,7 @@ import os
 from sys import prefix
 from typing import cast
 
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 from core.config import Config
 from core.npk.class_types import NPKEntry, State

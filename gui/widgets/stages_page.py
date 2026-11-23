@@ -250,20 +250,18 @@ class StagesPage(QtWidgets.QWidget):
             self.status.setText("")
             self._update_buttons()
             return
-        groups: dict[tuple[str, str], list[str]] = {}
+        groups: dict[str, list[str]] = {}
         for scene in scenes:
             parts = scene.split("\\")
             if "scene" in parts[:-1]:
                 at = parts.index("scene")
                 stage = parts[at + 1] if len(parts) > at + 2 else Path(scene.replace("\\", "/")).stem
-                pack = parts[0] if at > 0 else ""  # DLC packs keep their own scene folder
             else:
                 # e.g. res_dlc_x\levelsets\<stage>\<stage>.scn: file it under the same stage
                 stage = parts[-2] if len(parts) > 1 else Path(scene.replace("\\", "/")).stem
-                pack = parts[0] if len(parts) > 2 and parts[0].startswith("res_dlc") else ""
-            groups.setdefault((stage, pack), []).append(scene)
+            groups.setdefault(stage, []).append(scene)
         self.tree.setUpdatesEnabled(False)
-        for (stage, pack), members in sorted(groups.items(), key=lambda kv: (kv[0][0].lower(), kv[0][1])):
+        for stage, members in sorted(groups.items(), key=lambda kv: kv[0].lower()):
             largest = max(sizes.get(scene, 0) for scene in members)
             parent = QtWidgets.QTreeWidgetItem([stage, str(len(members)), _size_text(largest)])
             parent.setToolTip(2, "Size of the stage's largest scene file; bigger usually means more objects.")
