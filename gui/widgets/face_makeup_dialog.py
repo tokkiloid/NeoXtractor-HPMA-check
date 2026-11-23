@@ -28,6 +28,7 @@ from gui.widgets.face_makeup_data import (  # noqa: F401
     load_face_items,
     load_wardrobe_items,
     owl_clip,
+    pet_clip,
     pose_items,
     prop_clip,
     release_caches,
@@ -440,6 +441,7 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             "bag": "icon_beibao_01",
             "wand": "icon_yimaojian_huanmozhang",
             "owl": "icon_yimaojian_huanmaotouying",
+            "pet": "icon_shenqidongwu",
         }
 
         def ward(kind):
@@ -476,7 +478,7 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             "hair": ("Hairstyle", [("tiles", "Hairstyle", self.hair, None)], "pic_fuzhuangdian_shaixuan_toufa", None),
             "pose": ("Pose", [("tiles", "Pose", self.pose, None)], "pic_fuzhuangdian_shaixuan_zhanzi", None),
         }
-        for kind in ("clothes", "hat", "bag", "wand", "owl"):
+        for kind in ("clothes", "hat", "bag", "wand", "owl", "pet"):
             if kind in self.wardrobe:
                 by_key[kind] = (wardrobe_labels[kind], [ward(kind)], wardrobe_icons[kind], None)
         for first, second in (("glasses", "earring"), ("scarf", "brooch")):
@@ -498,6 +500,7 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             "bag",
             "wand",
             "owl",
+            "pet",
             "pose",
         )
         categories = [(key,) + by_key[key] for key in order if key in by_key]
@@ -516,6 +519,7 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             "face": "Face shapes are the game's edited versions of this face; newer faces have none.",
             "wand": "Held in the right hand: it follows the hand when a pose plays.",
             "owl": "The owl lands on the hand; any other change ends it. The owl pose shows it again.",
+            "pet": "On the shoulder or at the feet, playing its own idle whatever the pose; None sends it away.",
             "pose": "Plays in the 3D view; with None, the outfit's own idle or the Standard pose. Export ▼ saves it.",
         }
         self.category_buttons = QtWidgets.QButtonGroup(self)
@@ -1593,7 +1597,7 @@ class FaceMakeupDialog(QtWidgets.QDialog):
         """Everything picked except the owl: when it changes, the owl's landing preview ends (as in the game)."""
         combos = [self.face, self.shape, self.skin, self.hair_color1, self.hair_color2, self.pose]
         combos += list(self.choices.values()) + [self.hair, self.preset]
-        combos += [combo for kind, combo in self.wardrobe.items() if kind != "owl"]
+        combos += [combo for kind, combo in self.wardrobe.items() if kind not in ("owl", "pet")]
         return [self._sex()] + [combo.currentData() for combo in combos]
 
     def _owl_preview(self) -> bool:
@@ -1703,13 +1707,14 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             from core.npk.accessory_sockets import AttachedClip
 
             own = self.__dict__.setdefault("_prop_clips", {})
-            name = self.pose_clip_name()
+            name = attach.get("clip") or self.pose_clip_name()  # a pet plays its own idle whatever the pose
             if (attach["gim"], name, self._sex()) not in own:
-                own[(attach["gim"], name, self._sex())] = (
-                    owl_clip(self.library, attach["gim"], name, self._sex())
-                    if item.get("owl")
-                    else prop_clip(self.library, attach["gim"], name)
-                )
+                if item.get("owl"):
+                    own[(attach["gim"], name, self._sex())] = owl_clip(self.library, attach["gim"], name, self._sex())
+                elif item.get("pet"):
+                    own[(attach["gim"], name, self._sex())] = pet_clip(self.library, attach["gim"], name)
+                else:
+                    own[(attach["gim"], name, self._sex())] = prop_clip(self.library, attach["gim"], name)
             prop = own[(attach["gim"], name, self._sex())]
             switch = getattr(getattr(clip, "clip", clip), "switch", None)  # the character's landing length
             if prop is not None and switch is not None and hasattr(prop, "switch"):

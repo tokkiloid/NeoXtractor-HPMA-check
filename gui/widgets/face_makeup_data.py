@@ -182,6 +182,7 @@ WARDROBE = (
     ("bag", "Bag"),
     ("wand", "Wand"),
     ("owl", "Owl"),
+    ("pet", "Pet"),
 )
 WAND_ITEM = (200, 101)  # item type and sub_type of wand skins
 WAND_SOCKET = "attack_point"  # the wand tip's socket: wands are modelled in the space of its bone (the hand's prop)
@@ -193,6 +194,10 @@ OWL_FOLDER = "model\\items\\maotouying_all\\"
 OWL_ARRIVE, OWL_HOLD = "buy_born_maotouying", "buy_idle_maotouying"
 OWL_PREVIEW = f"{OWL_ARRIVE}+{OWL_HOLD}"  # a pose name for "the first clip once, then the second looped"
 OWL_POSE = "xinshou_buy_idle_maotouying"  # the standing pose with the owl on the hand (持鸮而立)
+PET_ITEM = 129  # item type of pets; the item's id is its beasts_list row
+PET_FLOOR = (-7.0, 0.0, 3.0)  # where a pet without a shoulder socket sits: beside the feet, in the root bone's space
+# Shoulder pets are modelled at most this big (bounding radius); the Niffler, modelled far bigger, is brought down
+PET_SHOULDER_MAX, PET_SHOULDER_SIZE = 6.5, 3.0
 
 
 DRESS_SEXES = {1: ("male",), 2: ("female",), 3: ("male", "female")}
@@ -438,10 +443,11 @@ def _wardrobe(library, links):
     for per_sex in found.values():
         for entries in per_sex.values():
             entries.sort(key=lambda e: e["order"])
-    wands, owls = _wands(library, english), _owls(library, english)
+    wands, owls, pets = _wands(library, english), _owls(library, english), _pets(library, english)
     for per_sex in found.values():
         per_sex["wand"] = list(wands)
         per_sex["owl"] = list(owls)
+        per_sex["pet"] = list(pets)
     return {"items": found, "masks": masks, "hidden": sorted(hidden)}
 
 
@@ -526,6 +532,103 @@ def owl_clip(library, gim: str, character_clip: str, sex: str):
     ):
         clip = prop_clip(library, gim, name)
         if clip is not None:
+            return clip
+    return None
+
+
+def _pets(library, english) -> list[dict]:
+    """
+    The released pets as wardrobe entries: item -> beasts_list row -> character row, whose model_file is the pet's
+    .gim. Its sockets entry carries what the pet needs: ("pet", .gim, the rig socket it rides on or "" for the
+    floor, its own idle, its scale).
+    """
+    from core.npk import game_tables
+
+    tables = library.tables
+    characters, beasts = tables.keyed_rows("character"), tables.keyed_rows("beasts_list")
+    entries = []
+    for item_id, item in tables.keyed_rows("item").items():
+        if not isinstance(item, dict) or item.get("type") != PET_ITEM or not item.get("launch"):
+            continue
+        beast = beasts.get(item_id) or {}
+        gim = str((characters.get(beast.get("model_id")) or {}).get("model_file") or "").replace("/", "\\")
+        if not gim:
+            continue
+        title = english.get(item.get("name", ""), "").strip()
+        if title.lower() in ("null!", "null", "n/a"):
+            title = ""
+        stem = gim.rsplit("\\", 1)[-1].rsplit(".", 1)[0]
+        socket = beast.get("shoulder_socket") or ""
+        pet = ("pet", gim, socket, beast.get("shoulder_idle_anim") or "", _pet_scale(library, gim, socket, beast))
+        entries.append(
+            {
+                "name": f"{title}  ·  {stem}" if title else stem,
+                "path": _gim_mesh(library, gim),
+                "icon": item.get("icon_path"),
+                "texture": None,
+                "sockets": [pet],
+                "idle": None,
+                "rarity": game_tables.item_rarity(tables, item_id),
+                "traits": game_tables.item_traits(tables, item_id),
+                "tags": game_tables.item_tags(tables, item_id),
+                "order": (str(item_id).zfill(8), False, ""),
+            }
+        )
+    entries.sort(key=lambda entry: entry["order"])
+    return entries
+
+
+def _pet_scale(library, gim: str, socket: str, beast: dict) -> float:
+    """
+    How much a pet is shrunk: floor pets modelled big (the Salamander, Wyvern, Streeler) by their extra_scale below
+    1; a shoulder pet bigger than the others (its .gim's bounding radius) down to the usual shoulder size.
+    """
+    scale = 1.0 if socket else min(1.0, float(beast.get("extra_scale") or 1.0))
+    found = library.index.read(gim)
+    if socket and found is not None:
+        match = re.search(rb'BoundingInfo="[^"]*\),([\d.]+)"', found[0])
+        radius = float(match.group(1)) if match else 0.0
+        if radius > PET_SHOULDER_MAX:
+            scale = PET_SHOULDER_SIZE / radius
+    return scale
+
+
+def _pet_items(library, items, pet, sex, report):
+    """
+    A pet on its shoulder socket, or on the floor beside the character when it has none. Tagged with its own idle,
+    which it plays whatever the pose; poses never put it away.
+    """
+    from core.npk import accessory_sockets
+
+    _kind, gim, socket, idle, scale = pet
+    sockets = accessory_sockets.for_library(library)
+    table, rest = sockets.sockets(sex), sockets.rest(sex)
+    if socket in table and table[socket][0] in rest:
+        bone, offset = table[socket][0], np.asarray(table[socket][1], float)
+    elif "biped" in rest:
+        bone, offset = "biped", np.eye(4)
+        offset[3, :3] = PET_FLOOR
+    else:
+        report.append("Pet: the character rig's root bone was not found")
+        return []
+    offset = np.diag([scale, scale, scale, 1.0]) @ offset
+    return [
+        dict(
+            item,
+            mesh=accessory_sockets._place(item["mesh"], offset @ rest[bone], bone, rest[bone], item["name"]),
+            attach={"gim": gim, "bone": bone, "offset": offset, "tag": item["name"], "clip": idle or "idle"},
+            pet=True,
+        )
+        for item in items
+    ]
+
+
+def pet_clip(library, gim: str, idle: str):
+    """A pet's own idle, looped; its plain idle when that one is missing. None when it has neither."""
+    for name in dict.fromkeys((idle, "idle")):
+        clip = prop_clip(library, gim, name)
+        if clip is not None:
+            clip.loop = True
             return clip
     return None
 
@@ -1086,6 +1189,9 @@ def load_wardrobe_items(library, path, report, texture=None, sockets=(), sex=Non
     from core.npk.stage_export import StageLoader
 
     items = load_face_items(library, [path], [], None, report)
+    pet = next((entry for entry in sockets if isinstance(entry, (tuple, list)) and entry and entry[0] == "pet"), None)
+    if pet is not None:
+        return _pet_items(library, items, tuple(pet), sex or "female", report)
     if is_owl(path):
         return _owl_on_root(library, items, path, sex or "female", report)
     if is_wand(path):
