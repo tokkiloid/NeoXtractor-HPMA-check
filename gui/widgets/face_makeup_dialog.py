@@ -339,6 +339,12 @@ class FaceMakeupDialog(QtWidgets.QDialog):
         self.search_row.setContentsMargins(8, 0, 0, 0)
         self.search_row.addWidget(self.search_box)
         panel_layout.addLayout(self.search_row)
+        self.slot_strip = QtWidgets.QWidget()
+        strip_layout = QtWidgets.QVBoxLayout(self.slot_strip)
+        strip_layout.setContentsMargins(16, 12, 4, 0)
+        self.slot_stack = QtWidgets.QStackedWidget()
+        strip_layout.addWidget(self.slot_stack)
+        panel_layout.addWidget(self.slot_strip)
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
@@ -534,9 +540,9 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             page_layout.setSpacing(4)
             tile_rows = [(label, box) for kind, label, box, _tab in rows if kind == "tiles"]
             slot_bar, sections, form = None, [], None
-            if len(tile_rows) > 1:  # several slots: one grid at a time, picked by icon tabs on top
+            if len(tile_rows) > 1:  # pages with more than one list: the icon tabs switch which one shows
                 slot_bar = _SlotTabs(self.sprites)
-                page_layout.addWidget(slot_bar)
+            self.slot_stack.addWidget(slot_bar if slot_bar is not None else QtWidgets.QWidget())
             for kind, label, box, tab in rows:
                 if kind == "all":
                     self.all_tiles = _AllTiles(all_sources, self.sprites)
@@ -596,6 +602,8 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             for box in boxes + ([title_combo] if title_combo is not None else []):
                 box.currentIndexChanged.connect(self._update_title)
         rail_layout.addStretch(1)
+        self.pages.currentChanged.connect(self._show_slot_tabs)
+        self._show_slot_tabs(self.pages.currentIndex())
         self.category_buttons.idClicked.connect(self._category_clicked)
         self.rail_glow = QtWidgets.QLabel(self.rail_buttons)
         self.rail_glow.setScaledContents(True)
@@ -730,6 +738,10 @@ class FaceMakeupDialog(QtWidgets.QDialog):
         self.brow_preview.setStyleSheet("background: #202020; border: 1px solid #444")
         self.brow_preview.hide()
         self.brow_image = None
+        self.hair_preview = QtWidgets.QLabel(self.preview)  # the dyed hair texture, appears above the eyebrow
+        self.hair_preview.setFixedSize(150, 150)
+        self.hair_preview.setStyleSheet("background: #202020; border: 1px solid #444")
+        self.hair_preview.hide()
         self.list_drag = _DragScroll(self.panel_scroll)
         self.filter_drag = _DragScroll(self.filter_scroll)
         self.list_drag.watch_children()
@@ -851,6 +863,12 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             self._layout_overlays()
             return
         self._show_category(number)
+
+    def _show_slot_tabs(self, number):
+        """The fixed tab strip shows the shown page's tabs, and goes away for pages with one list."""
+        if 0 <= number < len(self.categories):
+            self.slot_stack.setCurrentIndex(number)
+            self.slot_strip.setVisible(self.categories[number]["slots"] is not None)
 
     def _show_category(self, number):
         if number is None:
@@ -2061,42 +2079,32 @@ class FaceMakeupDialog(QtWidgets.QDialog):
                 QtCore.Qt.TransformationMode.SmoothTransformation,
             )
         )
-        if self.eye_image is not None:
-            eye = self.eye_image
-            qeye = QtGui.QImage(
-                eye.tobytes("raw", "RGBA"), eye.width, eye.height, QtGui.QImage.Format.Format_RGBA8888
+        # The small textures in the corner bottom right
+        brow = self.brow_image
+        if brow is not None:
+            brow = brow.crop((brow.width // 2, 0, brow.width, brow.height))
+        hair = (self.dressed or {}).get("hair")  # set only when a dye or preset colour changes the hair
+        slot = 0
+        insets = ((self.eye_preview, self.eye_image), (self.brow_preview, brow), (self.hair_preview, hair))
+        for label, inset in insets:
+            if inset is None:
+                label.hide()
+                continue
+            inset = inset.convert("RGBA")
+            qinset = QtGui.QImage(
+                inset.tobytes("raw", "RGBA"), inset.width, inset.height, QtGui.QImage.Format.Format_RGBA8888
             ).copy()
-            self.eye_preview.setPixmap(
-                QtGui.QPixmap.fromImage(qeye).scaled(
+            label.setPixmap(
+                QtGui.QPixmap.fromImage(qinset).scaled(
                     148,
                     148,
                     QtCore.Qt.AspectRatioMode.KeepAspectRatio,
                     QtCore.Qt.TransformationMode.SmoothTransformation,
                 )
             )
-            self.eye_preview.move(self.preview.width() - 158, self.preview.height() - 158)
-            self.eye_preview.show()
-        else:
-            self.eye_preview.hide()
-        if self.brow_image is not None:
-            brow = self.brow_image
-            brow = brow.crop((brow.width // 2, 0, brow.width, brow.height))  # the mesh uses the right half
-            qbrow = QtGui.QImage(
-                brow.tobytes("raw", "RGBA"), brow.width, brow.height, QtGui.QImage.Format.Format_RGBA8888
-            ).copy()
-            self.brow_preview.setPixmap(
-                QtGui.QPixmap.fromImage(qbrow).scaled(
-                    148,
-                    148,
-                    QtCore.Qt.AspectRatioMode.KeepAspectRatio,
-                    QtCore.Qt.TransformationMode.SmoothTransformation,
-                )
-            )
-            below = 158 if self.eye_image is not None else 0
-            self.brow_preview.move(self.preview.width() - 158, self.preview.height() - 158 - below)
-            self.brow_preview.show()
-        else:
-            self.brow_preview.hide()
+            slot += 1
+            label.move(self.preview.width() - 158, self.preview.height() - 158 * slot)
+            label.show()
 
     def resizeEvent(self, event):
         QtCore.QTimer.singleShot(0, self._place_rail_glow)
