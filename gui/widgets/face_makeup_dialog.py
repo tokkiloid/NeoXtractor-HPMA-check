@@ -32,6 +32,7 @@ from gui.widgets.face_makeup_data import (  # noqa: F401
     pet_clip,
     pose_items,
     prop_clip,
+    write_pet_pmx_vmd,
     release_caches,
     without_old_eye_faces,
 )
@@ -272,6 +273,12 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             action = export_menu.addAction(label)
             action.setToolTip(tip)
             action.triggered.connect(lambda _checked=False, fmt=fmt: self._export_pose(fmt))
+        pet_menu = export_menu.addMenu("Pet")
+        pet_menu.setObjectName("creatorPopover")
+        pet_action = pet_menu.addAction("PMX + VMD…")
+        pet_action.setToolTip("The chosen pet on its own, with its idle as a looping MMD motion.")
+        pet_action.triggered.connect(lambda _checked=False: self._export_pet())
+        pet_menu.setToolTipsVisible(True)
         export_menu.setToolTipsVisible(True)
         try:  # the PMX switches only change PMX exports: in their own submenu
             from core.mesh_converter.formats.pmx import pmx_option_actions
@@ -2241,6 +2248,25 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             hidden=tuple(self.layers.hidden),
             pose=self._pose_settings(),
         )
+
+    def _export_pet(self):
+        """Export the chosen pet as <model>.pmx and <model>.vmd of its idle, in the chosen folder."""
+        from gui.widgets.character_exports import start_export
+
+        combo = self.wardrobe.get("pet")
+        path = combo.currentData() if combo is not None else None
+        entries = (combo.itemData(combo.currentIndex(), SOCKETS_ROLE) or ()) if path else ()
+        pet = next((e for e in entries if isinstance(e, (list, tuple)) and e and e[0] == "pet"), None)
+        if pet is None:
+            QtWidgets.QMessageBox.information(self, "Export pet", "Pick a pet first.")
+            return
+        library = self.library
+
+        def build(_progress, _cancelled, _report, target):
+            pmx, vmd = write_pet_pmx_vmd(library, path, pet, target)
+            return f"{pmx.name} + {vmd.name} in {target}"
+
+        start_export(self.main_window, "each:vmd", path.rsplit("\\", 1)[-1].rsplit(".", 1)[0], build)
 
     def _export_pose(self, fmt):
         """The chosen pose through the character animation export (VMD for the exported PMX, or GLB)."""

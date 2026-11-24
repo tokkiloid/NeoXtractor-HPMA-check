@@ -194,8 +194,12 @@ def write_vmd(path, model_name: str, bone_names: list[str], keys, ik_off=()) -> 
     return path
 
 
-def write_pmx_vmd(item: dict, folder) -> tuple[Path, Path]:
-    """<folder>/<name>.pmx (+ <name>_textures) and <name>.vmd for one animated item, placed at the origin."""
+def write_pmx_vmd(item: dict, folder, translate=None) -> tuple[Path, Path]:
+    """
+    <folder>/<name>.pmx (+ <name>_textures) and <name>.vmd for one animated item, placed at the origin. translate:
+    MMD bone names and setup (by default the PMX options decide; off for models that aren't people, like pets).
+    """
+    translate = bone_names.enabled() if translate is None else translate
     clip = item.get("animation")
     if clip is None:
         raise ValueError(f"{item['name']} has no animation")
@@ -205,13 +209,11 @@ def write_pmx_vmd(item: dict, folder) -> tuple[Path, Path]:
     single = dict(item, matrix=None)  # MMD wants the model at the origin
     mesh, _materials = model_export.merge([single])
     # Translate first so the PMX and the VMD use the same (MMD) bone names
-    names = short_bone_names(
-        bone_names.translate(list(mesh.bone_name)) if bone_names.enabled() else list(mesh.bone_name)
-    )
-    pmx_path = model_export.write_pmx([single], folder / f"{name}.pmx", bone_names=names)
+    names = short_bone_names(bone_names.translate(list(mesh.bone_name)) if translate else list(mesh.bone_name))
+    pmx_path = model_export.write_pmx([single], folder / f"{name}.pmx", bone_names=names, translate_bones=translate)
     from core.mesh_converter import mmd_rig
 
-    rigged = bone_names.enabled() and mmd_rig.enabled()
+    rigged = translate and mmd_rig.enabled()
     if rigged:  # bake against the rigged PMX's chains
         mesh.bone_parent = mmd_rig.vmd_parents(names, list(mesh.bone_parent))
     keys, _frames = vmd_keyframes(mesh, clip)

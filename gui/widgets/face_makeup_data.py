@@ -638,6 +638,45 @@ def pet_clip(library, gim: str, idle: str):
     return None
 
 
+def write_pet_pmx_vmd(library, mesh_path: str, pet, folder) -> tuple:
+    """A pet on its own as PMX + VMD."""
+    import copy
+
+    from core.mesh_converter import vmd_export
+    from core.npk import anim_library
+    from core.npk.stage_export import StageLoader
+
+    _kind, gim, _socket, idle, scale = tuple(pet)[:5]
+    model = StageLoader(library.index, max_texture_size=8192).model(mesh_path)
+    clip = pet_clip(library, gim, idle or "idle")
+    if model is None or clip is None:
+        raise ValueError("The pet's model or its idle could not be read.")
+    mesh, parts = model
+    anim_library.match_bones(clip, mesh)
+    if abs(scale - 1.0) > 1e-6:  # shrunk like in the creator: the model and its motion alike
+        mesh = copy.copy(mesh)
+        mesh.position = [tuple(np.asarray(p, float) * scale) for p in mesh.position]
+        shrink = np.diag([scale, scale, scale, 1.0])
+        mesh.bone_matrix = [(np.asarray(m, float) @ shrink).astype(np.float32) for m in mesh.bone_matrix or ()]
+        clip = _ScaledClip(clip, scale)
+    name = mesh_path.rsplit("\\", 1)[-1].rsplit(".", 1)[0]
+    item = {"name": name, "mesh": mesh, "parts": parts, "animation": clip}
+    # Pets keep their own rig for now; it isn't translated for MMD yet
+    return vmd_export.write_pmx_vmd(item, folder, translate=False)
+
+
+class _ScaledClip:
+    """The pet's idle, shrunk by the same amount as its model."""
+
+    def __init__(self, clip, scale: float):
+        self.clip, self.name, self.duration = clip, clip.name, clip.duration
+        self.bone_names, self.parents = clip.bone_names, clip.parents
+        self._shrink = np.diag([scale, scale, scale, 1.0])
+
+    def world_matrices(self, time: float, root=None) -> np.ndarray:
+        return self._shrink @ self.clip.world_matrices(time)
+
+
 def _gim_mesh(library, gim: str) -> str:
     """The .mesh a .gim draws (its Mesh attribute, else the file next to it)."""
     import xml.etree.ElementTree as ET
@@ -1180,9 +1219,10 @@ def load_wardrobe_items(library, path, report, texture=None, sockets=(), sex=Non
     from core.npk.stage_export import StageLoader
 
     items = load_face_items(library, [path], [], None, report)
-    pet = next((entry for entry in sockets if isinstance(entry, (tuple, list)) and entry and entry[0] == "pet"), None)
-    if pet is not None:
-        return _pet_items(library, items, tuple(pet), sex or "female", report)
+    special = {entry[0]: tuple(entry) for entry in sockets if isinstance(entry, (tuple, list)) and entry}
+    sockets = [entry for entry in sockets if not isinstance(entry, (tuple, list))]  # the IDs of the attachments
+    if "pet" in special:
+        return _pet_items(library, items, special["pet"], sex or "female", report)
     if is_owl(path):
         return _owl_on_root(library, items, path, sex or "female", report)
     if is_wand(path):

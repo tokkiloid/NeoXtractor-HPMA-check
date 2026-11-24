@@ -418,10 +418,11 @@ def write_glb(items: list[dict], target, animations: bool = True) -> Path:
     return target
 
 
-def write_pmx(items: list[dict], target, bone_names: list[str] | None = None) -> Path:
+def write_pmx(items: list[dict], target, bone_names: list[str] | None = None, translate_bones=None) -> Path:
     """
     PMX through the app's converter, with materials named per part and PNG textures beside it.
-    bone_names optionally renames the merged bones (e.g. to fit a VMD's 15-byte names).
+    bone_names optionally renames the merged bones (e.g. to fit a VMD's 15-byte names). translate_bones: MMD names
+    and bone setup on or off (by default the PMX options decide).
     """
     from core.mesh_converter.formats import pmx as pmx_format
 
@@ -446,7 +447,7 @@ def write_pmx(items: list[dict], target, bone_names: list[str] | None = None) ->
             texture = written[id(image)]
         # Named like the object in NeoXtractor; the game's material name goes in the English name
         pmx_materials.append({"name": material["part_name"], "english_name": material["name"], "texture": texture})
-    target.write_bytes(pmx_format.convert(mesh, materials=pmx_materials))
+    target.write_bytes(pmx_format.convert(mesh, materials=pmx_materials, translate_bones=translate_bones))
     return target
 
 
