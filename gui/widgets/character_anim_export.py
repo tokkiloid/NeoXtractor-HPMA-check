@@ -229,8 +229,6 @@ def export_animations(main_window, game, sex: str, names: list[str], fmt: str, o
                 models[path] = loader.model(path)
             return models[path]
 
-        folder = os.path.join(target, f"{sex}_animations")
-        os.makedirs(folder, exist_ok=True)
         done, unsupported, scaled = 0, [], 0
         for number, name in enumerate(names):
             if cancelled():
@@ -247,7 +245,7 @@ def export_animations(main_window, game, sex: str, names: list[str], fmt: str, o
             except FileNotFoundError:
                 report.append(f"{name}: not found in the game files")
                 continue
-            out = os.path.join(folder, ca.safe_name(name))
+            out = os.path.join(target, ca.safe_name(name))
             try:
                 if fmt == "vmd":
                     _path, scales = ca.write_vmd(clip, skeleton, out + ".vmd", props if len(names) == 1 else ())
@@ -278,7 +276,7 @@ def export_animations(main_window, game, sex: str, names: list[str], fmt: str, o
         if not done:
             raise ValueError("No animation could be exported." + ("\n" + "\n".join(report[:5]) if report else ""))
         kind = "VMD" if fmt == "vmd" else "GLB"
-        return f"{done} {kind} file(s) in {folder}"
+        return f"{done} {kind} file(s) in {target}"
 
     start_export(main_window, "each:vmd" if fmt == "vmd" else "each:glb", "animations", build)
 

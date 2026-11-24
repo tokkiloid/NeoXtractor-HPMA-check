@@ -293,7 +293,7 @@ def export_face(
     pose=None,
 ):
     """
-    Write <output>/<face>_makeup/model.<fmt>: face (+ eyes, lashes, eyebrows) with the makeup baked in.
+    Write <output>/model.<fmt>: face (+ eyes, lashes, eyebrows) with the makeup baked in.
     pose: (clip, wand shown, prop ids, prop files) of the playing pose, whose props come along as they are shown.
     """
     from gui.widgets.character_exports import start_export
@@ -315,8 +315,6 @@ def export_face(
         eye = library.bake_eyes(look, notes)
         brow = library.bake_eyebrow(folder, sex, look, notes)
         report.extend(dict.fromkeys(notes))
-        out_folder = os.path.join(target, f"{face}_makeup")
-        os.makedirs(out_folder, exist_ok=True)
         output, eye_meshes = dress_face_items(library, items, sex, face, look, baked, eye, brow)
         if hair_choice:
             hair = hair_choice[0]
@@ -366,7 +364,7 @@ def export_face(
         hidden_names = set(hidden)  # pieces hidden in the creator's Layers box
         output = [item for item in output if item.get("name") not in hidden_names]
         progress(f"Writing model.{fmt}", len(mesh_paths) + 1, len(mesh_paths) + 2)
-        written = writer(output, os.path.join(out_folder, f"model.{fmt}"))
+        written = writer(output, os.path.join(target, f"model.{fmt}"))
         return f"{written}"
 
     start_export(main_window, f"each:{fmt}", f"{face}_makeup", build)
