@@ -2207,7 +2207,11 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             )
             return
         names = name.split("+")  # the owl preview: its landing and its holding idle
-        export_animations(self.main_window, self.game, self._sex(), names, fmt, _game_options())
+        from core.npk.accessory_sockets import AttachedClip
+
+        # Props, the owl and the pet are exported to the VMD too, if the view shows them
+        props = [(o.mesh, o.clip) for o in getattr(self, "objects3d", []) if isinstance(o.clip, AttachedClip)]
+        export_animations(self.main_window, self.game, self._sex(), names, fmt, _game_options(), props)
 
 
 def open_dialog(main_window, folder=None) -> None:

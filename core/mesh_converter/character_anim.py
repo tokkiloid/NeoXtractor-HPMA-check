@@ -85,8 +85,11 @@ def vmd_bone_names(clip) -> list[str]:
     return vmd_export.short_bone_names(names)
 
 
-def write_vmd(clip, skeleton, target) -> tuple[Path, bool]:
-    """<target>.vmd for a clip; returns (path, whether the clip also scales bones, which VMD cannot hold)."""
+def write_vmd(clip, skeleton, target, props=()) -> tuple[Path, bool]:
+    """
+    <target>.vmd for a clip; returns (path, whether the clip also scales bones, which VMD cannot hold).
+    props: pieces with their own animation (pose props, owls, pets), added to the same VMD.
+    """
     rig = SimpleNamespace(
         bone_name=list(clip.bone_names),
         bone_parent=list(skeleton.parents),
@@ -98,9 +101,20 @@ def write_vmd(clip, skeleton, target) -> tuple[Path, bool]:
     rigged = bone_names.enabled() and mmd_rig.enabled()
     if rigged:  # bake against the rigged PMX's chains
         rig.bone_parent = mmd_rig.vmd_parents(names, list(rig.bone_parent))
-    keys, _frames = vmd_export.vmd_keyframes(rig, clip)
+    keys, frames = vmd_export.vmd_keyframes(rig, clip)
     if rigged:  # the PMX's IK legs: key the FK leg bones, IK off
         names = [mmd_rig.vmd_name(n) for n in names]
+    character_names, prop_names, character_bones = list(names), [], set(clip.bone_names)
+    for mesh, prop_clip in props:
+        placed = SimpleNamespace(bone_name=mesh.bone_name, bone_parent=mesh.bone_parent, bone_matrix=mesh.bone_matrix)
+        own = [bone for bone, name in enumerate(mesh.bone_name) if name not in character_bones]
+        prop_keys, _frames = vmd_export.vmd_keyframes(placed, prop_clip, frames)
+        renumber = {bone: len(character_names) + len(prop_names) + number for number, bone in enumerate(own)}
+        prop_names += [mesh.bone_name[bone] for bone in own]
+        keys += [(renumber[bone], *rest) for bone, *rest in prop_keys if bone in renumber]
+    if prop_names:  # named exactly like the PMX export names them, so MMD finds them
+        translated = bone_names.translate(prop_names) if bone_names.enabled() else prop_names
+        names = character_names + vmd_export.short_bone_names(character_names + translated)[len(character_names) :]
     path = vmd_export.write_vmd(target, Path(target).stem[:20], names, keys, ik_off=mmd_rig.IK_BONES if rigged else ())
     scaled = bool(np.abs(clip.scales - skeleton.scales[None, : len(clip.bone_names)]).max() > 1e-3)
     return path, scaled

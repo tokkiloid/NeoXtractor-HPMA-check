@@ -883,6 +883,9 @@ def prop_clip(library, gim: str, clip_name: str):
         get_logger().debug("Unreadable animconfig %s", stem, exc_info=True)
         return None
     file = animations.get(clip_name.lower())
+    if not file:  # the same words in another order: the suitcase of idle_303_lxws plays idle_lxws_303
+        words = sorted(clip_name.lower().split("_"))
+        file = next((path for name, path in animations.items() if sorted(name.split("_")) == words), None)
     if not file:
         return None
     file = file.replace("/", "\\")

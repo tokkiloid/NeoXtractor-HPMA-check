@@ -205,7 +205,8 @@ class AnimationExportDialog(QtWidgets.QDialog):
         export_animations(self.main_window, self.game, sex, names, fmt, self.options)
 
 
-def export_animations(main_window, game, sex: str, names: list[str], fmt: str, options=None) -> None:
+def export_animations(main_window, game, sex: str, names: list[str], fmt: str, options=None, props=()) -> None:
+    """Animations of the player character as VMD or GLB; props: pieces keyed in a single VMD."""
     from gui.widgets.character_exports import start_export
 
     def build(progress, cancelled, report, target):
@@ -249,7 +250,7 @@ def export_animations(main_window, game, sex: str, names: list[str], fmt: str, o
             out = os.path.join(folder, ca.safe_name(name))
             try:
                 if fmt == "vmd":
-                    _path, scales = ca.write_vmd(clip, skeleton, out + ".vmd")
+                    _path, scales = ca.write_vmd(clip, skeleton, out + ".vmd", props if len(names) == 1 else ())
                     scaled += scales
                 else:
                     ca.write_glb(
