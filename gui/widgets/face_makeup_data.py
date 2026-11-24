@@ -1522,9 +1522,11 @@ def dress_face_items(library, items, sex, face, look, baked, eye, brow):
                     part["image"] = library.tint_eyebrow_texture(part.get("image"), look.eyebrow)
         if eye is not None and re.search(r"_eye_(l|r)_", lower):
             eye_meshes += 1
+            right = isinstance(eye, tuple) and "_eye_r_" in lower
+            iris = (eye[1] if right else eye[0]) if isinstance(eye, tuple) else eye
             for part in item["parts"]:
-                part["image"] = eye
-                part["texture"] = f"{face}_makeup_eye.png"
+                part["image"] = iris
+                part["texture"] = f"{face}_makeup_eye{'_r' if right else ''}.png"
                 part["material"] = f"{part.get('material') or 'eye'}_makeup"
         if not is_face:
             output.append(item)

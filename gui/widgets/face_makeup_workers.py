@@ -253,7 +253,7 @@ def _bake_worker(generation, library, folder, sex, look, side, face_texture, hai
         info = {
             "split": split,
             "notes": notes,
-            "eye": library.bake_eye(look, notes),
+            "eye": library.bake_eyes(look, notes),
             "eyebrow": library.bake_eyebrow(folder, sex, look, notes),
         }
         info["hair"] = bake_hair(hair_data, hair_choice, notes)
@@ -312,7 +312,7 @@ def export_face(
         baked = {
             side: library.bake(folder, sex, look, base_texture=face_texture, side=side, report=notes) for side in sides
         }
-        eye = library.bake_eye(look, notes)
+        eye = library.bake_eyes(look, notes)
         brow = library.bake_eyebrow(folder, sex, look, notes)
         report.extend(dict.fromkeys(notes))
         out_folder = os.path.join(target, f"{face}_makeup")
@@ -325,14 +325,17 @@ def export_face(
                 load_face_items(library, [hair_path or hair["mesh"]], [], None, report), hair, dyed
             )
             if dyed is not None:
-                dyed.save(os.path.join(out_folder, f"{ntpath.basename(hair['folder'])}_dyed.png"))
+                dyed.save(os.path.join(target, f"{ntpath.basename(hair['folder'])}_dyed.png"))
             report.extend(dict.fromkeys(n for n in notes if n.startswith("Hair dye")))
         for side, image in baked.items():
-            image.save(os.path.join(out_folder, f"{face}_makeup{'_' + side if side else ''}.png"))
-        if eye is not None:
-            eye.save(os.path.join(out_folder, f"{face}_makeup_eye.png"))
+            image.save(os.path.join(target, f"{face}_makeup{'_' + side if side else ''}.png"))
+        if isinstance(eye, tuple):
+            eye[0].save(os.path.join(target, f"{face}_makeup_eye.png"))
+            eye[1].save(os.path.join(target, f"{face}_makeup_eye_r.png"))
+        elif eye is not None:
+            eye.save(os.path.join(target, f"{face}_makeup_eye.png"))
         if brow is not None:
-            brow.save(os.path.join(out_folder, f"{face}_makeup_eyebrow.png"))
+            brow.save(os.path.join(target, f"{face}_makeup_eyebrow.png"))
             if not eye_meshes:
                 report.append(
                     "This face draws its eyes on the face texture (no separate eye meshes), "

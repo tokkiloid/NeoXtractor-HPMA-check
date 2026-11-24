@@ -1831,7 +1831,8 @@ class FaceMakeupDialog(QtWidgets.QDialog):
         self.dressed = split
         self._ensure_meshes()
         self._update_3d()
-        self.eye_image = split.get("eye")
+        eye = split.get("eye")
+        self.eye_image = eye[0] if isinstance(eye, tuple) else eye
         self.brow_image = split.get("eyebrow")
         self._show_preview()
         notes = split.get("notes", [])

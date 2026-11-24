@@ -218,10 +218,21 @@ class MakeupLibrary:
                 option.tags = tuple(str(t) for t in (item.get("item_tags") or ())) if item else ()
         return result
 
-    def bake_eye(self, look: Look, report: list | None = None):
+    def bake_eyes(self, look: Look, report: list | None = None):
+        """The iris textures: one for both eyes, or (left, right)."""
+        left = self.bake_eye(look, report)
+        row = look.eyecolor.row if look.eyecolor is not None else {}
+        two = row.get("right_eyecolor_enable") and row.get("right_eyecolor") not in (None, row.get("eye_color"))
+        if left is None or not two:
+            return left
+        right = self.bake_eye(look, report, right=True)
+        return (left, right) if right is not None else left
+
+    def bake_eye(self, look: Look, report: list | None = None, right: bool = False):
         """
         The iris texture of the separate eye meshes (*_eye_l / *_eye_r) for the look's eye type and colour,
-        or None when the look sets neither. Animated iris patterns are baked at their first frame.
+        or None when the look sets neither. Animated iris patterns are baked at their first frame. right: the right
+        eye's colour of a two-coloured iris.
         """
         from PIL import Image
 
@@ -233,7 +244,9 @@ class MakeupLibrary:
         mask = masks.get(mask_key) or masks.get("1")
         color_key = "1"
         if look.eyecolor is not None:
-            color_key = str(look.eyecolor.row.get("eye_color"))
+            row = look.eyecolor.row
+            two = right and row.get("right_eyecolor_enable")
+            color_key = str(row.get("right_eyecolor") if two else row.get("eye_color"))
         else:
             defaults = look.eyetype.row.get("default_eyecolor") or []
             for row in self.rows("face_eyecolor"):
