@@ -28,6 +28,7 @@ from gui.widgets.face_makeup_data import (  # noqa: F401
     load_face_items,
     load_wardrobe_items,
     owl_clip,
+    hair_preset_colors,
     pet_clip,
     pose_items,
     prop_clip,
@@ -89,6 +90,7 @@ from gui.widgets.face_makeup_workers import (  # noqa: F401
 )
 
 RAIL_BUTTON, RAIL_GAP, RAIL_ICON = 62, 10, 40  # rail button height, the space between buttons, icon size
+PRESET_SWATCHES = 8  # basic hairstyles have up to eight preset colours (some can also be dyed, as in the game)
 
 
 _TRIMMED: dict = {}
@@ -633,6 +635,14 @@ class FaceMakeupDialog(QtWidgets.QDialog):
             "Add a second colour (two-tone hair)", self.sprites, sprite="pic_jd_tianjia", text="+"
         )
         self.dye_add.clicked.connect(lambda: self._pick_dye(1))
+        # Some basic hairstyles can't be dyed, so the game offers preset colours as swatches instead
+        self.preset_buttons = QtWidgets.QButtonGroup(self)
+        for number in range(PRESET_SWATCHES):
+            button = _RoundButton("Preset hair colour", self.sprites, text="")
+            button.setCheckable(True)
+            button.hide()
+            self.preset_buttons.addButton(button, number)
+        self.preset_buttons.idClicked.connect(self._pick_hair_preset)
         self.size_buttons = QtWidgets.QButtonGroup(self)
         size_widgets = []
         for number, tip in enumerate(("Body size I (as modelled)", "Body size II (grown-up)")):
@@ -644,7 +654,7 @@ class FaceMakeupDialog(QtWidgets.QDialog):
         self.size_buttons.idClicked.connect(self._size_clicked)
         self.dye_widgets = [self.dye_original] + self.dye_buttons + [self.dye_add]
         self.size_widgets = size_widgets
-        for widget in self.dye_widgets + self.size_widgets:
+        for widget in self.dye_widgets + self.preset_buttons.buttons() + self.size_widgets:
             side.addWidget(widget)
         for combo in (self.hair, self.hair_color1, self.hair_color2):
             combo.currentIndexChanged.connect(self._update_dye_buttons)
@@ -1098,13 +1108,40 @@ class FaceMakeupDialog(QtWidgets.QDialog):
         self.dye_original.setChecked(self.hair_color1.currentData() is None and self.hair_color2.currentData() is None)
         hair = self.hair.currentData()
         dyeable = not isinstance(hair, dict) or bool(hair.get("qs"))  # basic hairstyles have preset colours
-        hair_page = self.categories[max(0, self.pages.currentIndex())]["key"] == "hair" and dyeable
+        on_hair = self.categories[max(0, self.pages.currentIndex())]["key"] == "hair"
+        hair_page = on_hair and dyeable
         for widget in [self.dye_original, self.dye_buttons[0]]:
             widget.setVisible(hair_page)
         two_tone = self.hair_color2.currentData() is not None
         self.dye_buttons[1].setVisible(hair_page and two_tone)
         self.dye_add.setVisible(hair_page and not two_tone)
+        presets = hair.get("presets") if isinstance(hair, dict) and not dyeable else None
+        colors = self._preset_colors(hair) if presets and on_hair else []
+        for number, button in enumerate(self.preset_buttons.buttons()):
+            button.setVisible(number < len(colors))
+            if number < len(colors):
+                button.color = colors[number]
+                button.setChecked(number == hair.get("preset", 0))
+                button.update()
         self._layout_overlays()
+
+    def _preset_colors(self, hair) -> list[str]:
+        """A basic hairstyle's swatch colours, worked out once per hairstyle."""
+        cache = self.__dict__.setdefault("_preset_color_cache", {})
+        if hair["folder"] not in cache:
+            cache[hair["folder"]] = hair_preset_colors(self.library, hair)
+        return cache[hair["folder"]]
+
+    def _pick_hair_preset(self, number):
+        """Wear a basic hairstyle using one of its preset colours."""
+        hair = self.hair.currentData()
+        if not isinstance(hair, dict) or number >= len(hair.get("presets") or ()):
+            return
+        preset = hair["presets"][number]
+        picked = dict(hair, mesh=preset["mesh"], preset_texture=preset["texture"], preset=number)
+        self.hair.setItemData(self.hair.currentIndex(), picked)
+        self._update_dye_buttons()
+        self._schedule()  # the hair reloads (its model) and re-bakes (its texture)
 
     def _rebuild_skin_buttons(self, *_args):
         """One round swatch per skin tone of this face, in the game's order, with the game's swatch icon."""

@@ -9,6 +9,7 @@ import ntpath
 import os
 import re
 import threading
+from types import SimpleNamespace
 
 import numpy as np
 from core.logger import get_logger
@@ -114,11 +115,42 @@ def _hair_data(game, library):
     return {"dye": dye, "hairs": hairs, "colors": dye.colors(), "originals": {}, "links": links}
 
 
+def mvar_texture(library, gim: str, number, cache: dict | None = None) -> str | None:
+    """The base texture (uniform_Tex0) of material variant `number` in the .mvar next to the model."""
+    import json
+
+    cache = cache if cache is not None else {}
+    mvar = gim.rsplit(".", 1)[0] + ".mvar"
+    if mvar not in cache:
+        cache[mvar] = None
+        found = library.index.read(mvar)
+        if found is not None:
+            try:
+                cache[mvar] = json.loads(found[0].decode("utf-8"))
+            except ValueError:
+                pass
+    for material in (cache[mvar] or {}).values():
+        if not isinstance(material, dict):
+            continue
+        columns = [
+            column[1] if isinstance(column, list) and len(column) > 1 else "" for column in material.get("columns", [])
+        ]
+        if "uniform_Tex0" not in columns:
+            continue
+        variant = material.get("variants", {}).get(str(number))
+        values = variant[1] if isinstance(variant, list) and len(variant) > 1 else {}
+        path = values.get(str(columns.index("uniform_Tex0"))) if isinstance(values, dict) else None
+        if isinstance(path, str) and path:
+            return path.replace("/", "\\")
+    return None
+
+
 def _basic_hairs(library, listed) -> list[dict]:
     """
     The basic hairstyles that are not dyeable, from color_hair: each named style item lists its colour items,
-    whose dress rows hold the model (<folder>\\<folder>_NN.gim, one per preset colour). The first colour is
-    the one shown; qs / rs stay None (no dye).
+    whose dress rows hold the model (<folder>\\<folder>_NN.gim, one per preset colour) or
+    the texture (model_tex on one model). Those are the style's presets, picked with swatches as in the game;
+    the first is shown at first. qs / rs stay None (no dye).
     """
     from core.npk import game_tables
 
@@ -132,7 +164,7 @@ def _basic_hairs(library, listed) -> list[dict]:
         }
     except Exception:
         return []
-    found = []
+    found, mvar_cache = [], {}
     for style_id, style in sorted(styles.items(), key=lambda kv: str(kv[0])):
         item = items.get(style_id)
         colours = [items.get(c) for c in (style.get("color_hair_items") or ()) if isinstance(style, dict)]
@@ -154,10 +186,22 @@ def _basic_hairs(library, listed) -> list[dict]:
         name = english.get(item.get("name", ""), "").strip()
         stem = folder.rsplit("\\", 1)[-1]
         icon = item.get("icon_path")
+        presets = []
+        for colour in colours:
+            row = dresses.get(colour.get("mini_type")) if isinstance(colour, dict) else None
+            if isinstance(row, dict) and row.get("model"):
+                model = row["model"].replace("/", "\\")
+                texture = (row.get("model_tex") or "").replace("/", "\\") or None
+                if texture is None and row.get("model_mtg_id") is not None:  # a material variant (.mvar)
+                    texture = mvar_texture(library, model, int(row["model_mtg_id"]), mvar_cache)
+                presets.append({"mesh": model, "texture": texture})
         found.append(
             {
                 "folder": folder,
                 "mesh": gim,
+                "presets": presets if len(presets) > 1 else [],
+                "preset": 0,
+                "preset_texture": presets[0]["texture"] if presets else None,
                 "qs": None,
                 "rs": None,
                 "dress_id": dress.get("id"),
@@ -216,7 +260,6 @@ def _wardrobe(library, links):
     recolours becomes one entry. Models with no dress row are added at the end, except incomplete remakes, which are
     hidden. Also returns, for each hat, the trimmed hairstyles it uses.
     """
-    import json
     import xml.etree.ElementTree as ET
     from core.npk import game_tables
 
@@ -266,31 +309,7 @@ def _wardrobe(library, links):
     mvar_cache: dict = {}
 
     def variant_texture(gim, number):
-        """The base texture (uniform_Tex0) of material variant `number` in the .mvar next to the model."""
-        mvar = gim.rsplit(".", 1)[0] + ".mvar"
-        if mvar not in mvar_cache:
-            mvar_cache[mvar] = None
-            found_mvar = library.index.read(mvar)
-            if found_mvar is not None:
-                try:
-                    mvar_cache[mvar] = json.loads(found_mvar[0].decode("utf-8"))
-                except ValueError:
-                    pass
-        for material in (mvar_cache[mvar] or {}).values():
-            if not isinstance(material, dict):
-                continue
-            columns = [
-                column[1] if isinstance(column, list) and len(column) > 1 else ""
-                for column in material.get("columns", [])
-            ]
-            if "uniform_Tex0" not in columns:
-                continue
-            variant = material.get("variants", {}).get(str(number))
-            values = variant[1] if isinstance(variant, list) and len(variant) > 1 else {}
-            path = values.get(str(columns.index("uniform_Tex0"))) if isinstance(values, dict) else None
-            if isinstance(path, str) and path:
-                return path.replace("/", "\\")
-        return None
+        return mvar_texture(library, gim, number, mvar_cache)
 
     default_cache: dict = {}
 
@@ -1225,8 +1244,11 @@ def bake_hair(hair_data, hair_choice, notes):
     if not hair_choice:
         return None
     hair, color1, color2 = hair_choice
+    if hair is not None and not hair.get("qs") and hair.get("preset_texture"):
+        # Some basic hairstyles keep one model and swap only the texture per colour: the chosen colour's texture
+        return _read_texture(SimpleNamespace(index=hair_data["dye"].index), hair["preset_texture"])
     if hair is None or (color1 is None and color2 is None) or not hair.get("qs"):
-        return None  # no dye chosen, or a basic hairstyle (preset colours)
+        return None  # nothing to change: no dye picked, or a basic hairstyle whose colour comes with its model
     color1 = color1 if color1 is not None else color2
     color2 = color2 if color2 is not None else color1
     try:
@@ -1234,6 +1256,29 @@ def bake_hair(hair_data, hair_choice, notes):
     except Exception as exc:
         notes.append(f"Hair dye: {exc}")
         return None
+
+
+def hair_preset_colors(library, hair) -> list[str]:
+    """A swatch colour per preset: the average colour of its texture, leaving out see-through pixels."""
+    colors = []
+    for preset in hair.get("presets") or ():
+        texture = preset["texture"] or _model_texture(library, preset["mesh"])
+        image = _read_texture(library, texture) if texture else None
+        if image is None:
+            colors.append("#808080")
+            continue
+        pixels = np.asarray(image.reduce(8) if min(image.size) >= 64 else image, float).reshape(-1, 4)
+        weights = pixels[:, 3] / 255.0
+        rgb = (pixels[:, :3] * weights[:, None]).sum(0) / max(weights.sum(), 1e-6)
+        colors.append("#" + "".join(f"{int(round(v)):02x}" for v in np.clip(rgb, 0, 255)))
+    return colors
+
+
+def _model_texture(library, gim: str) -> str | None:
+    """A model's own main texture (Tex0 of its .mtg)."""
+    found = library.index.read(gim.rsplit(".", 1)[0] + ".mtg")
+    match = re.search(rb'<Tex0 Value="([^"]+)"', found[0]) if found else None
+    return match.group(1).decode("utf-8", "replace").replace("/", "\\") if match else None
 
 
 def offered_shapes(library) -> dict[str, list[str]]:
