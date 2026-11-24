@@ -218,5 +218,7 @@ def write_pmx_vmd(item: dict, folder, translate=None) -> tuple[Path, Path]:
         mesh.bone_parent = mmd_rig.vmd_parents(names, list(mesh.bone_parent))
     keys, _frames = vmd_keyframes(mesh, clip)
     vmd_names = [mmd_rig.vmd_name(n) for n in names] if rigged else names
+    if rigged:  # the hips move on センター, as in MMD motions
+        vmd_names, keys = mmd_rig.hips_to_center(vmd_names, keys)
     vmd_path = write_vmd(folder / f"{name}.vmd", name, vmd_names, keys, ik_off=mmd_rig.IK_BONES if rigged else ())
     return pmx_path, vmd_path

@@ -133,8 +133,9 @@ as a playable Ogg file), or right-click for **Save selected…**, which keeps th
 
 Every PMX export (Characters, creator, Scene Viewer) has a **PMX options** menu:
 
-- **Translate bones to MMD names** and **MMD bone setup** (センター, IK legs, display frames), so most MMD motions
-  work on the model (yaaaaa, HPMA dancing to K-pop);
+- **Translate bones to MMD names** and **MMD bone setup** (センター, IK legs, display frames and the semi-standard
+  bones: 腰, 肩P, arm and wrist twists, 手先 and ダミー), so most MMD motions work on the model (yaaaaa, HPMA dancing
+  to K-pop);
 - **Five fingers**: the game only rigs three fingers; this gives the ring and little fingers their own bones;
 - **Body rigid bodies**: collision so hair and cloth physics don't fall through the body;
 - **Raise shoulder bones** for cleaner raised arms: the game's rig has its shoulders lower than MMD motions

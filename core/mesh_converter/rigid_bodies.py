@@ -114,9 +114,14 @@ def add_body_rigid_bodies(model, report=None) -> int:
     pos = {name: np.array([bones[i].position.x, bones[i].position.y, bones[i].position.z]) for name, i in index.items()}
     ys = positions[:, 1]
     height = float(ys.max() - ys.min()) or 10.0
-    # The body's centre line: the middle of each left/right bone pair (single bones like 上半身 can sit slightly off it, so
-    # they aren't used).
-    pairs = [(p[0] + pos["右" + n[1:]][0]) / 2 for n, p in pos.items() if n.startswith("左") and "右" + n[1:] in pos]
+    # The body's centre line: the middle of each left/right bone pair. Single bones like 上半身 can sit slightly off it,
+    # so they aren't used, nor the semi-standard bones the rig places from the shoulders and legs.
+    added = ("肩P", "肩C", "捩", "手先", "ダミー", "腰キャンセル", "足IK親")
+    pairs = [
+        (p[0] + pos["右" + n[1:]][0]) / 2
+        for n, p in pos.items()
+        if n.startswith("左") and "右" + n[1:] in pos and not any(a in n for a in added)
+    ]
     middle = float(np.median(pairs)) if pairs else float(pos["上半身"][0])
 
     # bones whose vertices count for a body bone (the D legs, twist and helper bones of the same part)

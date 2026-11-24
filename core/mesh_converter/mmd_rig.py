@@ -1,8 +1,9 @@
 """MMD bone setup for PMX exports.
 
 Bones named in the bone table (bone_names) are arranged into the usual MMD chains, with 全ての親, センター,
-グルーブ, leg IK and D bones that follow the IK legs. Other bones keep their parents. Bone tails and display
-frames are added too.
+グルーブ, leg IK and D bones that follow the IK legs, and the semi-standard bones MMD motions use: 腰 with its
+腰キャンセル, 足IK親, 肩P / 肩C, the arm and wrist twists (腕捩, 手捩) and 手先 / ダミー. Other bones keep their
+parents. Bone tails and display frames are added too.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ from __future__ import annotations
 import math
 
 SETTING = "pmx_export.mmd_rig"
-LABEL = "MMD bone setup on PMX export (IK legs, センター, display frames)"
+LABEL = "MMD bone setup on PMX export (IK legs, センター, semi-standard bones, display frames)"
 SHOULDER_SETTING = "pmx_export.raise_shoulders"
 SHOULDER_LABEL = "Raise shoulder bones (cleaner raised arms)"
 SIDES = ("左", "右")
@@ -25,6 +26,12 @@ FINGER_TIPS = {
 }
 FINGER_ENGLISH = {"親指": "thumb", "人指": "index", "中指": "middle", "薬指": "ring", "小指": "little"}
 LEG_FK = {"足D": "足", "ひざD": "ひざ", "足首D": "足首"}
+# Twist bones: (twist, the bone it turns, the bone it leads to); the twist sits 60 % of the way, its three helpers
+# copy a quarter, half and three quarters of it, and the skin between the joints is shared out among them
+TWISTS = (("腕捩", "腕", "ひじ"), ("手捩", "ひじ", "手首"))
+TWIST_AT = 0.6
+TWIST_HELPERS = ((1, 0.32, 0.25), (2, 0.52, 0.5), (3, 0.72, 0.75))  # number, place along the bone, share copied
+TWIST_FULL = 0.92  # past here the skin turns with the whole twist
 
 
 def _switch(key, settings) -> bool:
@@ -54,21 +61,21 @@ def shoulders_enabled(settings=None) -> bool:
 def _chain() -> dict[str, list[str]]:
     """MMD name -> preferred parents (first one present wins)."""
     chain = {
-        "上半身": ["グルーブ"],
+        "上半身": ["腰", "グルーブ"],
         "上半身2": ["上半身"],
         "首": ["上半身2", "上半身"],
         "頭": ["首"],
-        "下半身": ["グルーブ"],
+        "下半身": ["腰", "グルーブ"],
     }
     for s in SIDES:
         chain.update(
             {
                 f"{s}目": ["頭"],
-                f"{s}肩": ["上半身2", "上半身"],
-                f"{s}腕": [f"{s}肩", "上半身2"],
-                f"{s}ひじ": [f"{s}腕"],
-                f"{s}手首": [f"{s}ひじ"],
-                f"{s}足D": ["下半身"],
+                f"{s}肩": [f"{s}肩P", "上半身2", "上半身"],
+                f"{s}腕": [f"{s}肩C", f"{s}肩", "上半身2"],
+                f"{s}ひじ": [f"{s}腕捩", f"{s}腕"],
+                f"{s}手首": [f"{s}手捩", f"{s}ひじ"],
+                f"{s}足D": [f"腰キャンセル{s}", "下半身"],
                 f"{s}ひざD": [f"{s}足D"],
                 f"{s}足首D": [f"{s}ひざD"],
                 f"{s}足先EX": [f"{s}足首D"],
@@ -140,6 +147,27 @@ def build(bones, translated_names):
     add(new_bone("センター", "center", common.Vector3(0.0, hip_y * 0.7, 0.0), move=True), "全ての親")
     add(new_bone("グルーブ", "groove", common.Vector3(0.0, hip_y * 0.75, 0.0), move=True), "センター")
 
+    # Semi-standard bones. Where they sit is set again by place_semi_standard once the shoulders are raised.
+    if "上半身" in index and "下半身" in index:
+        add(new_bone("腰", "waist", common.Vector3(0.0, hip_y * 0.8, hip.z)), "グルーブ")
+    for s in SIDES:
+        side = "L" if s == "左" else "R"
+        if "腰" in index and f"{s}足D" in index:
+            add(new_bone(f"腰キャンセル{s}", f"waist cancel_{side}", pos[f"{s}足D"], visible=False), "下半身")
+        if f"{s}肩" in index and f"{s}腕" in index:
+            add(new_bone(f"{s}肩P", f"shoulderP_{side}", pos[f"{s}肩"]), "上半身2" if "上半身2" in index else "上半身")
+            add(new_bone(f"{s}肩C", f"shoulderC_{side}", pos[f"{s}腕"], visible=False), f"{s}肩")
+        for twist, bone, child in TWISTS:
+            if f"{s}{bone}" in index and f"{s}{child}" in index:
+                english = f"{'arm' if twist == '腕捩' else 'wrist'} twist_{side}"
+                add(new_bone(f"{s}{twist}", english, pos[f"{s}{bone}"]), f"{s}{bone}")
+                for number, _place, _share in TWIST_HELPERS:
+                    helper = new_bone(f"{s}{twist}{number}", f"{english}{number}", pos[f"{s}{bone}"], visible=False)
+                    add(helper, f"{s}{bone}")
+        if f"{s}手首" in index:
+            add(new_bone(f"{s}手先", f"hand tip_{side}", pos[f"{s}手首"], visible=False), f"{s}手首")
+            add(new_bone(f"{s}ダミー", f"dummy_{side}", pos[f"{s}手首"], move=True), f"{s}手首")
+
     # Translated bones into the MMD chains; untranslated roots under 全ての親
     for name in translated:
         for parent in chain.get(name, []):
@@ -157,7 +185,7 @@ def build(bones, translated_names):
             continue
         add(
             new_bone(f"{s}足", f"leg_{'L' if s == '左' else 'R'}", pos[f"{s}足D"]),
-            "下半身" if "下半身" in index else "グルーブ",
+            f"腰キャンセル{s}" if f"腰キャンセル{s}" in index else "下半身" if "下半身" in index else "グルーブ",
         )
         add(new_bone(f"{s}ひざ", f"knee_{'L' if s == '左' else 'R'}", pos[f"{s}ひざD"]), f"{s}足")
         add(new_bone(f"{s}足首", f"ankle_{'L' if s == '左' else 'R'}", pos[f"{s}足首D"]), f"{s}ひざ")
@@ -174,7 +202,9 @@ def build(bones, translated_names):
             new_bone(f"{s}つま先", f"toe_{'L' if s == '左' else 'R'}", toe_pos, visible=False, operable=False),
             f"{s}足首",
         )
-        add(new_bone(f"{s}足ＩＫ", f"leg IK_{'L' if s == '左' else 'R'}", ankle, move=True), "全ての親")
+        ground = common.Vector3(ankle.x, 0.0, ankle.z)
+        add(new_bone(f"{s}足IK親", f"leg IKP_{'L' if s == '左' else 'R'}", ground, move=True), "全ての親")
+        add(new_bone(f"{s}足ＩＫ", f"leg IK_{'L' if s == '左' else 'R'}", ankle, move=True), f"{s}足IK親")
         add(new_bone(f"{s}つま先ＩＫ", f"toe IK_{'L' if s == '左' else 'R'}", toe_pos, move=True), f"{s}足ＩＫ")
         ik_specs.append(s)
 
@@ -226,7 +256,7 @@ def build(bones, translated_names):
         kids.sort(
             key=lambda k: (
                 nodes[k].name != "両目",
-                nodes[k].name not in IK_BONES,
+                nodes[k].name not in IK_BONES and not nodes[k].name.endswith("足IK親"),
                 nodes[k].name.endswith(("D", "EX")),
                 k,
             )
@@ -260,6 +290,19 @@ def build(bones, translated_names):
         toe_ik = result[by_name[f"{s}つま先ＩＫ"]]
         toe_ik.setFlag(pmx.BONEFLAG_IS_IK, True)
         toe_ik.ik = pmx.Ik(by_name[f"{s}つま先"], 3, 4.0, [pmx.IkLink(by_name[f"{s}足首"], 0)])
+    grants = [(f"腰キャンセル{s}", "腰", -1.0) for s in SIDES] + [(f"{s}肩C", f"{s}肩P", -1.0) for s in SIDES]
+    grants += [
+        (f"{s}{twist}{number}", f"{s}{twist}", share)
+        for s in SIDES
+        for twist, _bone, _child in TWISTS
+        for number, _place, share in TWIST_HELPERS
+    ]
+    for name, source, factor in grants:
+        if name in by_name and source in by_name:
+            bone = result[by_name[name]]
+            bone.effect_index = by_name[source]
+            bone.effect_factor = factor
+            bone.setFlag(pmx.BONEFLAG_IS_EXTERNAL_ROTATION, True)
     if "両目" in by_name:
         for s in SIDES:
             eye = result[by_name[f"{s}目"]]
@@ -315,17 +358,20 @@ def build(bones, translated_names):
     arm_stems = ("肩", "腕", "ひじ", "手首", "親指", "人指", "中指", "薬指", "小指")
     for bone in result:
         side_free = bone.name[1:] if bone.name[:1] in "左右" else ""
-        if bone.name in ("上半身", "上半身2", "首", "頭") or (side_free and side_free.startswith(arm_stems)):
+        if bone.name in ("上半身", "上半身2", "下半身", "腰", "首", "頭") or (
+            side_free and side_free.startswith(arm_stems) and not side_free.startswith("ダミー")
+        ):
             bone.setFlag(pmx.BONEFLAG_CAN_TRANSLATE, False)
 
     # Display frames
+    arm_frame = ("肩P", "肩", "腕", "腕捩", "ひじ", "手捩", "手首", "ダミー")
     groups = [
         ("センター", "Center", ["センター", "グルーブ"]),
-        ("ＩＫ", "IK", [n for n in IK_BONES if n in by_name]),
+        ("ＩＫ", "IK", [n for n in (*IK_BONES, "左足IK親", "右足IK親") if n in by_name]),
         ("体(上)", "Upper body", ["上半身", "上半身2", "首", "頭", "両目", "左目", "右目"]),
-        ("腕", "Arms", [f"{s}{b}" for s in SIDES for b in ("肩", "腕", "ひじ", "手首")]),
+        ("腕", "Arms", [f"{s}{b}" for s in SIDES for b in arm_frame]),
         ("指", "Fingers", [n for n in by_name if any(f in n for f in FINGERS) and not n.endswith("先")]),
-        ("体(下)", "Lower body", ["下半身"]),
+        ("体(下)", "Lower body", ["腰", "下半身"]),
         ("足", "Legs", [f"{s}{b}" for s in SIDES for b in ("足", "ひざ", "足首", "足D", "ひざD", "足首D", "足先EX")]),
     ]
     used = {"全ての親"}
@@ -420,6 +466,191 @@ def raise_shoulders(model, report=None) -> float:
     if report is not None and (arm or shoulder):
         report.append(f"upper arms raised by {arm:.3f}, shoulders by {shoulder:.3f}")
     return arm
+
+
+def place_semi_standard(model) -> None:
+    """
+    Put the semi-standard bones where MMD rigs have them, once the shoulders are raised: 肩P at 肩, 肩C at 腕, the
+    twists along their bones (turning about the bone), 手先 and ダミー at the hand. The arms, hands and fingers get
+    local axes (x along the bone, z to the back), and the skin between the joints is shared out among the twists.
+    """
+    import numpy as np
+    from pymeshio import common, pmx
+
+    bones = model.bones
+    index = {bone.name: i for i, bone in enumerate(bones)}
+
+    def at(name):
+        v = bones[index[name]].position
+        return np.array([v.x, v.y, v.z], float)
+
+    def put(name, point):
+        bones[index[name]].position = common.Vector3(*(float(c) for c in point))
+
+    for s in SIDES:
+        if f"{s}肩P" in index:  # on top of 肩: no tail of its own, as in MMD rigs
+            put(f"{s}肩P", at(f"{s}肩"))
+            shoulder = bones[index[f"{s}肩P"]]
+            shoulder.setFlag(pmx.BONEFLAG_TAILPOS_IS_BONE, False)
+            shoulder.tail_position = common.Vector3(0.0, 0.0, 0.0)
+        if f"{s}足IK親" in index and f"{s}足ＩＫ" in index:  # points up at the IK handle it carries
+            ground = bones[index[f"{s}足IK親"]]
+            ground.tail_index = index[f"{s}足ＩＫ"]
+            ground.setFlag(pmx.BONEFLAG_TAILPOS_IS_BONE, True)
+        if f"{s}肩C" in index:
+            put(f"{s}肩C", at(f"{s}腕"))
+        for twist, bone, child in TWISTS:
+            if f"{s}{twist}" not in index:
+                continue
+            start, end = at(f"{s}{bone}"), at(f"{s}{child}")
+            put(f"{s}{twist}", start + (end - start) * TWIST_AT)
+            axis = (end - start) / max(np.linalg.norm(end - start), 1e-9)
+            turning = bones[index[f"{s}{twist}"]]
+            turning.setFlag(pmx.BONEFLAG_HAS_FIXED_AXIS, True)
+            turning.fixed_axis = common.Vector3(*(float(c) for c in axis))
+            turning.setFlag(pmx.BONEFLAG_TAILPOS_IS_BONE, False)  # no tail, as in MMD rigs: it only turns in place
+            turning.tail_position = common.Vector3(0.0, 0.0, 0.0)
+            for number, place, _share in TWIST_HELPERS:
+                put(f"{s}{twist}{number}", start + (end - start) * place)
+        if f"{s}手先" in index:
+            wrist, elbow = at(f"{s}手首"), at(f"{s}ひじ") if f"{s}ひじ" in index else at(f"{s}手首")
+            middle = f"{s}中指１"
+            tip = wrist + (at(middle) - wrist) * 0.85 if middle in index else wrist + (wrist - elbow) * 0.3
+            put(f"{s}手先", tip)
+            hand = bones[index[f"{s}手首"]]
+            hand.tail_index = index[f"{s}手先"]
+            hand.setFlag(pmx.BONEFLAG_TAILPOS_IS_BONE, True)
+            if f"{s}ダミー" in index:  # below the palm, where a held prop sits
+                drop = 0.25 * np.linalg.norm(wrist - elbow)
+                put(f"{s}ダミー", wrist + (tip - wrist) * 0.1 - np.array([0.0, drop, 0.0]))
+
+    # Local axes: x toward the bone's tail, z the back (0, 0, 1) made square to it
+    limbs = ("肩", "腕", "ひじ", "手首", *FINGERS)
+    for bone in bones:
+        stem = bone.name[1:] if bone.name[:1] in "左右" else ""
+        if not stem.startswith(limbs) or stem.endswith(("先", "P", "C")) or "捩" in stem:
+            continue
+        if bone.hasFlag(pmx.BONEFLAG_TAILPOS_IS_BONE):
+            if not 0 <= bone.tail_index < len(bones):
+                continue
+            tail = bones[bone.tail_index].position
+            direction = np.array([tail.x - bone.position.x, tail.y - bone.position.y, tail.z - bone.position.z])
+        else:
+            tail = bone.tail_position
+            direction = np.array([tail.x, tail.y, tail.z], float)
+        length = np.linalg.norm(direction)
+        if length < 1e-6:
+            continue
+        x = direction / length
+        z = np.array([0.0, 0.0, 1.0]) - x[2] * x
+        if np.linalg.norm(z) < 1e-6:
+            continue
+        z /= np.linalg.norm(z)
+        bone.setFlag(pmx.BONEFLAG_HAS_LOCAL_COORDINATE, True)
+        bone.local_x_vector = common.Vector3(*(float(c) for c in x))
+        bone.local_z_vector = common.Vector3(*(float(c) for c in z))
+
+    _share_twist_weights(model, index, at)
+
+
+def _share_twist_weights(model, index, at) -> None:
+    """
+    The skin of each upper arm and forearm moves onto its twist bones by where it sits along the bone: the bone's own
+    up to 12 %, then blending through the three helpers (32, 52, 72 %) to the whole twist at 92 %. Skin also weighted
+    to the body (shoulder, chest) is left as it is, so the armpits keep their shape.
+    """
+    import numpy as np
+    from pymeshio import pmx
+
+    arm_stems = ("腕", "ひじ", "手首", *FINGERS)
+    for s in SIDES:
+        allowed = {i for name, i in index.items() if name[:1] == s and name[1:].startswith(arm_stems)}
+        for twist, bone, child in TWISTS:
+            names = [f"{s}{bone}", f"{s}{child}", f"{s}{twist}"] + [f"{s}{twist}{n}" for n, _p, _s in TWIST_HELPERS]
+            if not all(name in index for name in names):
+                continue
+            source = index[f"{s}{bone}"]
+            start, end = at(f"{s}{bone}"), at(f"{s}{child}")
+            span = end - start
+            reach = float(np.dot(span, span)) or 1.0
+            anchors = [(TWIST_HELPERS[0][1] - 0.2, source)]
+            anchors += [(place, index[f"{s}{twist}{n}"]) for n, place, _share in TWIST_HELPERS]
+            anchors += [(TWIST_FULL, index[f"{s}{twist}"])]
+            for vertex in model.vertices:
+                weights = _weights(vertex.deform)
+                total = dict(weights)
+                if source not in total or not set(total) <= allowed:
+                    continue
+                point = np.array([vertex.position.x, vertex.position.y, vertex.position.z])
+                t = float(np.dot(point - start, span)) / reach
+                shares = _anchor_shares(anchors, t)
+                moved = total.pop(source)
+                for target, share in shares:
+                    total[target] = total.get(target, 0.0) + moved * share
+                kept = [(i, w) for i, w in total.items() if w > 1e-6]
+                if len(kept) > 4:
+                    continue
+                vertex.deform = _deform(kept, pmx)
+
+
+def _anchor_shares(anchors, t):
+    """[(bone, share)] at t along the bone, blending linearly between the two anchors around it."""
+    if t <= anchors[0][0]:
+        return [(anchors[0][1], 1.0)]
+    for (low, below), (high, above) in zip(anchors, anchors[1:]):
+        if t <= high:
+            mix = (t - low) / (high - low)
+            return [(below, 1.0 - mix), (above, mix)]
+    return [(anchors[-1][1], 1.0)]
+
+
+def _weights(deform) -> list:
+    if hasattr(deform, "index3"):
+        pairs = [(deform.index0, deform.weight0), (deform.index1, deform.weight1)]
+        pairs += [(deform.index2, deform.weight2), (deform.index3, deform.weight3)]
+    elif hasattr(deform, "index1"):
+        pairs = [(deform.index0, deform.weight0), (deform.index1, 1.0 - deform.weight0)]
+    else:
+        pairs = [(deform.index0, 1.0)]
+    merged: dict = {}
+    for i, w in pairs:
+        if w > 0:
+            merged[i] = merged.get(i, 0.0) + w
+    return list(merged.items())
+
+
+def _deform(pairs, pmx):
+    total = sum(w for _i, w in pairs) or 1.0
+    pairs = [(i, w / total) for i, w in pairs]
+    if len(pairs) == 1:
+        return pmx.Bdef1(pairs[0][0])
+    if len(pairs) == 2:
+        return pmx.Bdef2(pairs[0][0], pairs[1][0], pairs[0][1])
+    pairs += [(0, 0.0)] * (4 - len(pairs))
+    return pmx.Bdef4(*(i for i, _w in pairs), *(w for _i, w in pairs))
+
+
+def hips_to_center(names: list[str], keys: list) -> tuple[list[str], list]:
+    """
+    A baked motion's hip movement on センター, as MMD motions have it: 上半身 and 下半身 only turn in MMD models, so
+    the position keys the game's pelvis gives them move to a センター key (the whole body moves with it).
+    """
+    if "下半身" not in names:
+        return names, keys
+    hips = names.index("下半身")
+    upper = names.index("上半身") if "上半身" in names else -1
+    names = list(names)
+    if "センター" not in names:
+        names.append("センター")
+    center = names.index("センター")
+    moved = []
+    for bone, frame, position, rotation in keys:
+        if bone == hips:
+            moved.append((center, frame, tuple(position), (0.0, 0.0, 0.0, 1.0)))
+        if bone in (hips, upper):
+            position = (0.0, 0.0, 0.0)
+        moved.append((bone, frame, position, rotation))
+    return names, moved
 
 
 def remove_unused(model) -> int:
@@ -627,7 +858,7 @@ def vmd_parents(names: list[str], parents: list[int]) -> list[int]:
             if parent in index:
                 result[i] = index[parent]
                 break
-            if parent in ("グルーブ", "センター", "全ての親"):
+            if parent in ("グルーブ", "センター", "全ての親", "腰"):
                 result[i] = -1
                 break
     return result

@@ -115,6 +115,8 @@ def write_vmd(clip, skeleton, target, props=()) -> tuple[Path, bool]:
     if prop_names:  # named exactly like the PMX export names them, so MMD finds them
         translated = bone_names.translate(prop_names) if bone_names.enabled() else prop_names
         names = character_names + vmd_export.short_bone_names(character_names + translated)[len(character_names) :]
+    if rigged:  # the hips move on センター, as in MMD motions
+        names, keys = mmd_rig.hips_to_center(names, keys)
     path = vmd_export.write_vmd(target, Path(target).stem[:20], names, keys, ik_off=mmd_rig.IK_BONES if rigged else ())
     scaled = bool(np.abs(clip.scales - skeleton.scales[None, : len(clip.bone_names)]).max() > 1e-3)
     return path, scaled

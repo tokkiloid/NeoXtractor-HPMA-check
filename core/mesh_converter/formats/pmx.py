@@ -265,6 +265,13 @@ def convert(
         except Exception:
             get_logger().exception("Could not raise the shoulder bones")
 
+    # The semi-standard bones (肩P, the twists, 手先...) where MMD rigs have them, now that the shoulders are placed
+    if mesh.has_bones and translate_bones and mmd_rig.enabled(_settings_manager()):
+        try:
+            mmd_rig.place_semi_standard(pmx_model)
+        except Exception:
+            get_logger().exception("Could not place the semi-standard bones")
+
     # Leave out bones that don't move anything in this export, so each model only gets the bones it uses.
     if mesh.has_bones:
         try:
