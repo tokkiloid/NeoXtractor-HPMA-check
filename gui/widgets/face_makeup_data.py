@@ -1229,10 +1229,12 @@ def load_wardrobe_items(library, path, report, texture=None, sockets=(), sex=Non
         return _hold_wand(library, items, sex or "female", report)
     if texture:
         items = _recolour(library, items, texture, report, path)
+    if _hung_on_its_socket(library, path, sockets):
+        items = []  # the game draws this piece only where its socket hangs it (Lavish Danglers on the ear)
     items += attachment_items(library, path, sockets, report)
     if "\\clothes\\" in path.lower():
-        gim_path = path.rsplit(".", 1)[0] + "_body.gim"
-        found = library.index.read(gim_path)
+        gim_path = _body_piece(library, path, texture)
+        found = library.index.read(gim_path) if gim_path else None
         if found is not None:
             try:
                 target = (ET.fromstring(found[0]).get("Mesh") or "").strip()
@@ -1248,7 +1250,59 @@ def load_wardrobe_items(library, path, report, texture=None, sockets=(), sex=Non
 
     sockets = for_library(library)
     sex = sex or ("female" if "\\girl\\" in path.lower() else "male")
-    return sockets.attach(items, path, sex, report)
+    return _on_the_head(sockets, sockets.attach(items, path, sex, report), path, sex)
+
+
+def _body_piece(library, path, texture=None) -> str | None:
+    """
+    The .gim of the body piece an outfit is worn with: <outfit>_body.gim, else the one of the colour worn
+    (the Keeper uniform's colours are models of their own: male_clothes_15_01_kuidiqi_body.gim), else the one in
+    the outfit's folder.
+    """
+    candidates = [path.rsplit(".", 1)[0] + "_body.gim"]
+    if texture:
+        candidates.append(texture.rsplit(".", 1)[0] + "_body.gim")
+    for candidate in candidates:
+        if library.index.read(candidate) is not None:
+            return candidate
+    folder = path.rsplit("\\", 1)[0].lower() + "\\"
+    in_folder = sorted(
+        name
+        for name in library.index.manifest()
+        if name.lower().startswith(folder) and name.lower().endswith("_body.gim") and "\\" not in name[len(folder) :]
+    )
+    return in_folder[0] if in_folder else None
+
+
+def _hung_on_its_socket(library, path, sockets) -> bool:
+    """Whether one of the piece's attachments hangs its own model on a socket (then that copy is the one shown)."""
+    own = path.rsplit(".", 1)[0].lower() + ".gim"
+    rows = library.tables.keyed_rows("attachments") if sockets else {}
+    return any(str((rows.get(number) or {}).get("path") or "").replace("/", "\\").lower() == own for number in sockets)
+
+
+def _on_the_head(sockets, items, path, sex):
+    """
+    Earrings, glasses and hats whose bones hang on no bone of the character (the left earring of
+    male_earring_141_yxzs, a dangle chain of its own) on the head, where they are modelled, so they follow it.
+    """
+    from core.npk.accessory_sockets import _place
+
+    parts = path.lower().split("\\")
+    if len(parts) < 6 or parts[5] not in ("earring", "glasses", "hat"):
+        return items
+    rest = sockets.rest(sex)
+    head = next((name for name in rest if name.lower().replace(" ", "_") == "bip001_head"), None)
+    if head is None:
+        return items
+    placed = []
+    for item in items:
+        mesh = item.get("mesh")
+        names = list(getattr(mesh, "bone_name", None) or [])
+        if names and not any(name in rest for name in names):
+            item = dict(item, mesh=_place(mesh, np.eye(4), head, rest[head], item["name"]))
+        placed.append(item)
+    return placed
 
 
 def dress_wardrobe_items(items, skin):
